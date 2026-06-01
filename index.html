@@ -12,6 +12,8 @@
   .screen { display: none; padding: 24px; }
   .screen.active { display: block; }
   .big-btn { font-size: 28px; padding: 24px 48px; margin: 24px; border: none; border-radius: 12px; background: #2563eb; color: #fff; cursor: pointer; }
+  .en { font-weight: normal; color: #888; }
+  h2 .en, h3 .en { display: block; font-size: 0.55em; margin-top: 4px; }
   .number { font-size: 96px; font-weight: bold; color: #2563eb; }
 
   /* 管理画面の3カラム */
@@ -48,17 +50,17 @@
 </head>
 <body>
 <nav>
-  <button data-screen="reception" class="active">受付</button>
+  <button data-screen="reception" class="active">受付 / Reception</button>
   <button data-screen="admin">呼び出し管理</button>
-  <button data-screen="display">呼び出し表示</button>
+  <button data-screen="display">呼び出し表示 / Display</button>
 </nav>
 
 <section id="reception" class="screen active">
-  <h2>整理券受付</h2>
-  <button id="issue-btn" class="big-btn">整理券を取る</button>
+  <h2>整理券受付<span class="en">Take a Ticket</span></h2>
+  <button id="issue-btn" class="big-btn">整理券を取る<br><span class="en">Take a Ticket</span></button>
   <p id="issued-label"></p>
   <p class="number" id="issued-number"></p>
-  <p>現在の待ち人数: <span id="waiting-count">0</span> 人</p>
+  <p>現在の待ち人数 / People waiting: <span id="waiting-count">0</span> 人</p>
 </section>
 
 <section id="admin" class="screen">
@@ -83,11 +85,11 @@
 <section id="display" class="screen">
   <div class="display-cols">
     <div class="display-col calling-box">
-      <h2 class="col-calling-title">呼び出し中</h2>
+      <h2 class="col-calling-title">呼び出し中<span class="en">Now Calling</span></h2>
       <ul id="display-calling" class="display-list display-calling"></ul>
     </div>
     <div class="display-col waiting-box">
-      <h2 class="col-waiting-title">お待ちの番号</h2>
+      <h2 class="col-waiting-title">お待ちの番号<span class="en">Waiting</span></h2>
       <ul id="display-waiting" class="display-list display-waiting"></ul>
     </div>
   </div>
@@ -225,7 +227,7 @@
 
   document.getElementById('issue-btn').addEventListener('click', () => {
     update(issueTicket(state));
-    document.getElementById('issued-label').textContent = 'あなたの番号は';
+    document.getElementById('issued-label').textContent = 'あなたの番号は / Your number is';
     document.getElementById('issued-number').textContent = state.lastIssued;
   });
 
