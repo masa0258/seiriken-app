@@ -95,10 +95,10 @@
   }
 
   function ensureAudio() {
-    if (audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume(); return; }
+    if (audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume().catch(function () {}); return; }
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) { audioCtx = new AC(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+      if (AC) { audioCtx = new AC(); if (audioCtx.state === 'suspended') audioCtx.resume().catch(function () {}); }
     } catch (e) { audioCtx = null; }
   }
 
@@ -112,6 +112,7 @@
       osc.frequency.value = 880;
       gain.gain.value = 0.2;
       osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.onended = function () { try { osc.disconnect(); gain.disconnect(); } catch (e) {} };
       osc.start(t); osc.stop(t + 0.25);
       t += 0.4;
     }
