@@ -192,6 +192,7 @@
 
 <script src="queue.js"></script>
 <script src="printer.js"></script>
+<script src="status.js"></script>
 <script>
   const STORAGE_KEY = 'seiriken-state';
   const PRINT_SETTINGS_KEY = 'seiriken-print-settings';
@@ -394,10 +395,50 @@
     });
   });
 
+  async function publishStatus(config, status) {
+    const base = config.supabaseUrl.replace(/\/+$/, '');
+    const res = await fetch(base + '/rest/v1/rpc/publish_status', {
+      method: 'POST',
+      headers: {
+        'apikey': config.anonKey,
+        'Authorization': 'Bearer ' + config.anonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_secret: config.publishSecret,
+        p_calling: status.calling_number,
+        p_recent: status.recent_called,
+        p_waiting: status.waiting_numbers,
+        p_count: status.waiting_count,
+        p_last: status.last_issued,
+        p_avg: status.avg_serve_ms,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error('HTTP ' + res.status + ' ' + text);
+    }
+  }
+
+  let publishTimer = null;
+  function schedulePublish() {
+    if (!syncSettings.enabled) return;
+    if (!syncSettings.supabaseUrl || !syncSettings.anonKey || !syncSettings.publishSecret) return;
+    if (publishTimer) clearTimeout(publishTimer);
+    publishTimer = setTimeout(() => {
+      publishTimer = null;
+      const status = buildPublicStatus(state);
+      publishStatus(syncSettings, status)
+        .then(() => { setSyncStatus('オンライン共有: 送信OK ' + new Date().toLocaleTimeString()); })
+        .catch((e) => { setSyncStatus('オンライン共有エラー: ' + e.message); });
+    }, 400);
+  }
+
   function update(newState) {
     state = newState;
     saveState(state);
     render();
+    schedulePublish();
   }
 
   function renderPartySize() {
