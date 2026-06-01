@@ -6,15 +6,21 @@
 <title>整理券システム</title>
 <style>
   body { font-family: system-ui, sans-serif; margin: 0; text-align: center; }
-  nav { display: flex; }
+  nav { display: flex; flex-wrap: wrap; }
   nav button { flex: 1; padding: 12px; font-size: 16px; border: none; background: #eee; cursor: pointer; }
   nav button.active { background: #2563eb; color: #fff; }
   .screen { display: none; padding: 24px; }
   .screen.active { display: block; }
-  .big-btn { font-size: 28px; padding: 24px 48px; margin: 24px; border: none; border-radius: 12px; background: #2563eb; color: #fff; cursor: pointer; }
+  .big-btn { font-size: 28px; padding: 24px 48px; margin: 16px; border: none; border-radius: 12px; background: #2563eb; color: #fff; cursor: pointer; }
+  .number { font-size: 96px; font-weight: bold; color: #2563eb; }
   .en { font-weight: normal; color: #888; }
   h2 .en, h3 .en { display: block; font-size: 0.55em; margin-top: 4px; }
-  .number { font-size: 96px; font-weight: bold; color: #2563eb; }
+
+  /* 人数ピッカー */
+  .party-picker { display: inline-flex; align-items: center; gap: 16px; margin: 16px; }
+  .party-picker .label { font-size: 18px; }
+  .step-btn { font-size: 32px; width: 56px; height: 56px; border: 1px solid #2563eb; background: #fff; color: #2563eb; border-radius: 50%; cursor: pointer; }
+  #party-size { font-size: 40px; font-weight: bold; min-width: 60px; }
 
   /* 管理画面の3カラム */
   .status-cols { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; align-items: flex-start; }
@@ -24,8 +30,9 @@
   .col-calling h3 { color: #16a34a; }
   .col-done h3 { color: #9ca3af; }
   .ticket-list { list-style: none; padding: 0; margin: 0; }
-  .ticket-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-bottom: 1px solid #eee; }
+  .ticket-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-bottom: 1px solid #eee; flex-wrap: wrap; }
   .tnum { font-size: 28px; font-weight: bold; min-width: 48px; text-align: left; }
+  .tsize { color: #666; font-size: 14px; }
   .small-btn { font-size: 14px; padding: 6px 12px; border: none; border-radius: 8px; color: #fff; cursor: pointer; }
   .small-btn.call { background: #16a34a; }
   .small-btn.done { background: #2563eb; }
@@ -46,6 +53,12 @@
   .display-calling li { color: #16a34a; }
   .display-waiting li { color: #6b7280; }
   .display-list li.dim { color: #ccc; }
+
+  /* 記録・集計画面 */
+  table.report { border-collapse: collapse; margin: 12px auto; min-width: 320px; }
+  table.report th, table.report td { border: 1px solid #ddd; padding: 6px 12px; font-size: 14px; }
+  table.report th { background: #f3f4f6; }
+  .csv-btn { font-size: 16px; padding: 12px 24px; margin: 16px; border: none; border-radius: 8px; background: #16a34a; color: #fff; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -53,10 +66,18 @@
   <button data-screen="reception" class="active">受付 / Reception</button>
   <button data-screen="admin">呼び出し管理</button>
   <button data-screen="display">呼び出し表示 / Display</button>
+  <button data-screen="report">記録・集計</button>
 </nav>
 
 <section id="reception" class="screen active">
   <h2>整理券受付<span class="en">Take a Ticket</span></h2>
+  <div class="party-picker">
+    <span class="label">人数 / Party size</span>
+    <button id="party-minus" class="step-btn">−</button>
+    <span id="party-size">1</span>
+    <button id="party-plus" class="step-btn">＋</button>
+  </div>
+  <br>
   <button id="issue-btn" class="big-btn">整理券を取る<br><span class="en">Take a Ticket</span></button>
   <p id="issued-label"></p>
   <p class="number" id="issued-number"></p>
@@ -95,17 +116,39 @@
   </div>
 </section>
 
+<section id="report" class="screen">
+  <h2>記録・集計</h2>
+  <button id="csv-btn" class="csv-btn">CSVダウンロード</button>
+
+  <h3>時間帯別の来客数（発券ベース）</h3>
+  <table class="report">
+    <thead>
+      <tr><th>時間帯</th><th>組数</th><th>人数</th></tr>
+    </thead>
+    <tbody id="summary-body"></tbody>
+  </table>
+
+  <h3>発券記録の一覧</h3>
+  <table class="report">
+    <thead>
+      <tr><th>番号</th><th>人数</th><th>発券</th><th>案内</th><th>完了</th><th>状態</th></tr>
+    </thead>
+    <tbody id="records-body"></tbody>
+  </table>
+</section>
+
 <script src="queue.js"></script>
 <script>
   const STORAGE_KEY = 'seiriken-state';
+  const STATUS_LABEL = { waiting: '待機', calling: '呼び出し中', done: '完了' };
 
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return initialState();
       const s = JSON.parse(raw);
-      const arr = (x) => Array.isArray(x) ? x.filter((n) => typeof n === 'number') : [];
-      return { lastIssued: s.lastIssued | 0, waiting: arr(s.waiting), calling: arr(s.calling), done: arr(s.done) };
+      if (!Array.isArray(s.tickets)) return initialState();
+      return { lastIssued: s.lastIssued | 0, tickets: s.tickets };
     } catch (e) {
       return initialState();
     }
@@ -115,11 +158,11 @@
   }
 
   let state = loadState();
+  let partySize = 1;
 
   function clearChildren(el) {
     while (el.firstChild) el.removeChild(el.firstChild);
   }
-
   function makeButton(label, cls, onClick) {
     const b = document.createElement('button');
     b.textContent = label;
@@ -127,87 +170,109 @@
     b.addEventListener('click', onClick);
     return b;
   }
-
-  function renderAdminWaiting() {
-    const el = document.getElementById('admin-waiting');
-    clearChildren(el);
-    if (state.waiting.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'empty';
-      li.textContent = 'なし';
-      el.appendChild(li);
-      return;
-    }
-    state.waiting.forEach((n) => {
-      const li = document.createElement('li');
-      const span = document.createElement('span');
-      span.className = 'tnum';
-      span.textContent = n;
-      li.appendChild(span);
-      li.appendChild(makeButton('呼ぶ', 'call', () => update(callTicket(state, n))));
-      el.appendChild(li);
-    });
+  function ticketLine(t) {
+    const wrap = document.createElement('span');
+    const num = document.createElement('span');
+    num.className = 'tnum';
+    num.textContent = t.number;
+    const size = document.createElement('span');
+    size.className = 'tsize';
+    size.textContent = ' (' + t.partySize + '名)';
+    wrap.appendChild(num);
+    wrap.appendChild(size);
+    return wrap;
+  }
+  function fmtTime(ms) {
+    if (!ms) return '—';
+    const d = new Date(ms);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+      String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function fmtFull(ms) {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' +
+      p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
 
-  function renderAdminCalling() {
-    const el = document.getElementById('admin-calling');
-    clearChildren(el);
-    if (state.calling.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'empty';
-      li.textContent = 'なし';
-      el.appendChild(li);
-      return;
-    }
-    state.calling.forEach((n) => {
-      const li = document.createElement('li');
-      const span = document.createElement('span');
-      span.className = 'tnum';
-      span.textContent = n;
-      li.appendChild(span);
-      li.appendChild(makeButton('完了', 'done', () => update(completeTicket(state, n))));
-      li.appendChild(makeButton('待機に戻す', 'back', () => update(backToWaiting(state, n))));
-      el.appendChild(li);
-    });
-  }
-
-  function renderAdminDone() {
-    const el = document.getElementById('admin-done');
-    clearChildren(el);
-    if (state.done.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'empty';
-      li.textContent = 'なし';
-      el.appendChild(li);
-      return;
-    }
-    state.done.forEach((n) => {
-      const li = document.createElement('li');
-      const span = document.createElement('span');
-      span.className = 'tnum';
-      span.textContent = n;
-      li.appendChild(span);
-      li.appendChild(makeButton('呼び出し中に戻す', 'call', () => update(recallTicket(state, n))));
-      el.appendChild(li);
-    });
-  }
-
-  function renderDisplayList(elId, numbers) {
+  function renderAdminColumn(elId, status, withButtons) {
     const el = document.getElementById(elId);
     clearChildren(el);
+    const list = ticketsByStatus(state, status);
+    if (list.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'なし';
+      el.appendChild(li);
+      return;
+    }
+    list.forEach((t) => {
+      const li = document.createElement('li');
+      li.appendChild(ticketLine(t));
+      const n = t.number;
+      if (status === 'waiting') {
+        li.appendChild(makeButton('呼ぶ', 'call', () => update(callTicket(state, n, Date.now()))));
+      } else if (status === 'calling') {
+        li.appendChild(makeButton('完了', 'done', () => update(completeTicket(state, n, Date.now()))));
+        li.appendChild(makeButton('待機に戻す', 'back', () => update(backToWaiting(state, n))));
+      } else if (status === 'done') {
+        li.appendChild(makeButton('呼び出し中に戻す', 'call', () => update(recallTicket(state, n))));
+      }
+      el.appendChild(li);
+    });
+  }
+
+  function renderDisplayList(elId, status) {
+    const el = document.getElementById(elId);
+    clearChildren(el);
+    const numbers = ticketsByStatus(state, status).map((t) => t.number);
     const li = document.createElement('li');
     li.textContent = numbers.length === 0 ? '---' : numbers.join(', ');
     if (numbers.length === 0) li.className = 'dim';
     el.appendChild(li);
   }
 
+  function addRow(tbody, cells) {
+    const tr = document.createElement('tr');
+    cells.forEach((c) => {
+      const td = document.createElement('td');
+      td.textContent = c;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+
+  function renderReport() {
+    const sb = document.getElementById('summary-body');
+    clearChildren(sb);
+    const summary = hourlySummary(state);
+    if (summary.length === 0) {
+      addRow(sb, ['データなし', '', '']);
+    } else {
+      summary.forEach((row) => addRow(sb, [row.label, row.groups + ' 組', row.guests + ' 名']));
+    }
+
+    const rb = document.getElementById('records-body');
+    clearChildren(rb);
+    const sorted = [...state.tickets].sort((a, b) => a.number - b.number);
+    if (sorted.length === 0) {
+      addRow(rb, ['データなし', '', '', '', '', '']);
+    } else {
+      sorted.forEach((t) => addRow(rb, [
+        t.number, t.partySize + '名', fmtTime(t.issuedAt), fmtTime(t.calledAt), fmtTime(t.completedAt), STATUS_LABEL[t.status],
+      ]));
+    }
+  }
+
   function render() {
-    document.getElementById('waiting-count').textContent = state.waiting.length;
-    renderAdminWaiting();
-    renderAdminCalling();
-    renderAdminDone();
-    renderDisplayList('display-calling', state.calling);
-    renderDisplayList('display-waiting', state.waiting);
+    document.getElementById('waiting-count').textContent = ticketsByStatus(state, 'waiting').length;
+    renderAdminColumn('admin-waiting', 'waiting');
+    renderAdminColumn('admin-calling', 'calling');
+    renderAdminColumn('admin-done', 'done');
+    renderDisplayList('display-calling', 'calling');
+    renderDisplayList('display-waiting', 'waiting');
+    renderReport();
   }
 
   document.querySelectorAll('nav button').forEach((btn) => {
@@ -225,17 +290,51 @@
     render();
   }
 
+  function renderPartySize() {
+    document.getElementById('party-size').textContent = partySize;
+  }
+  document.getElementById('party-minus').addEventListener('click', () => {
+    if (partySize > 1) partySize -= 1;
+    renderPartySize();
+  });
+  document.getElementById('party-plus').addEventListener('click', () => {
+    if (partySize < 99) partySize += 1;
+    renderPartySize();
+  });
+
   document.getElementById('issue-btn').addEventListener('click', () => {
-    update(issueTicket(state));
+    update(issueTicket(state, partySize, Date.now()));
     document.getElementById('issued-label').textContent = 'あなたの番号は / Your number is';
-    document.getElementById('issued-number').textContent = state.lastIssued;
+    document.getElementById('issued-number').textContent = state.lastIssued + '（' + partySize + '名）';
+    partySize = 1;
+    renderPartySize();
   });
 
   document.getElementById('reset-btn').addEventListener('click', () => {
-    if (!confirm('番号をすべてリセットします。よろしいですか？')) return;
+    if (!confirm('番号と記録をすべてリセットします。よろしいですか？')) return;
     document.getElementById('issued-label').textContent = '';
     document.getElementById('issued-number').textContent = '';
     update(resetState());
+  });
+
+  document.getElementById('csv-btn').addEventListener('click', () => {
+    const header = ['番号', '人数', '発券日時', '案内日時', '完了日時', 'ステータス'];
+    const rows = [header];
+    [...state.tickets].sort((a, b) => a.number - b.number).forEach((t) => {
+      rows.push([t.number, t.partySize, fmtFull(t.issuedAt), fmtFull(t.calledAt), fmtFull(t.completedAt), STATUS_LABEL[t.status]]);
+    });
+    const csv = rows.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    a.href = url;
+    a.download = 'seiriken-' + now.getFullYear() + p(now.getMonth() + 1) + p(now.getDate()) + '-' + p(now.getHours()) + p(now.getMinutes()) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   });
 
   window.addEventListener('storage', (e) => {
@@ -245,6 +344,7 @@
     }
   });
 
+  renderPartySize();
   render();
 </script>
 </body>

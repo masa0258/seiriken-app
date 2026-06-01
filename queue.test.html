@@ -14,87 +14,83 @@
     results.appendChild(li);
   }
 
-  check('initialState は 0,[],[],[]', (() => {
+  const T1 = new Date('2026-06-01T12:05:00').getTime();
+  const T2 = new Date('2026-06-01T12:40:00').getTime();
+  const T3 = new Date('2026-06-01T13:10:00').getTime();
+
+  check('initialState は 0 と空配列', (() => {
     const s = initialState();
-    return s.lastIssued === 0 && s.waiting.length === 0 && s.calling.length === 0 && s.done.length === 0;
+    return s.lastIssued === 0 && s.tickets.length === 0;
   })());
 
-  check('issueTicket は番号を1つ増やし待機に追加', (() => {
-    const s2 = issueTicket(issueTicket(initialState()));
-    return s2.lastIssued === 2 && s2.waiting.join(',') === '1,2' && s2.calling.length === 0;
+  check('issueTicket は番号・人数・発券時刻を記録', (() => {
+    const s = issueTicket(initialState(), 3, T1);
+    const t = s.tickets[0];
+    return s.lastIssued === 1 && t.number === 1 && t.partySize === 3 &&
+           t.status === 'waiting' && t.issuedAt === T1 && t.calledAt === null && t.completedAt === null;
   })());
 
   check('issueTicket は元の state を変更しない', (() => {
     const s0 = initialState();
-    issueTicket(s0);
-    return s0.lastIssued === 0 && s0.waiting.length === 0;
+    issueTicket(s0, 2, T1);
+    return s0.lastIssued === 0 && s0.tickets.length === 0;
   })());
 
-  check('callTicket は待機→呼び出し中へ移動', (() => {
-    let s = issueTicket(issueTicket(initialState())); // waiting [1,2]
-    s = callTicket(s, 1);
-    return s.waiting.join(',') === '2' && s.calling.join(',') === '1';
+  check('callTicket は呼び出し中にして案内時刻を記録', (() => {
+    let s = issueTicket(initialState(), 2, T1);
+    s = callTicket(s, 1, T2);
+    const t = findTicket(s, 1);
+    return t.status === 'calling' && t.calledAt === T2;
   })());
 
-  check('callTicket は複数を呼び出し中にできる', (() => {
-    let s = issueTicket(issueTicket(initialState())); // waiting [1,2]
-    s = callTicket(s, 1);
-    s = callTicket(s, 2);
-    return s.waiting.length === 0 && s.calling.join(',') === '1,2';
+  check('callTicket は待機でない番号なら変化しない', (() => {
+    let s = callTicket(issueTicket(initialState(), 1, T1), 1, T2); // calling
+    const s2 = callTicket(s, 1, T3);
+    return findTicket(s2, 1).calledAt === T2;
   })());
 
-  check('callTicket は待機に無い番号なら変化しない', (() => {
-    const s0 = issueTicket(initialState());
-    const s1 = callTicket(s0, 99);
-    return s1.waiting.join(',') === '1' && s1.calling.length === 0;
+  check('completeTicket は完了にして完了時刻を記録', (() => {
+    let s = callTicket(issueTicket(initialState(), 1, T1), 1, T2);
+    s = completeTicket(s, 1, T3);
+    const t = findTicket(s, 1);
+    return t.status === 'done' && t.completedAt === T3;
   })());
 
-  check('completeTicket は呼び出し中→完了へ移動', (() => {
-    let s = callTicket(issueTicket(initialState()), 1); // calling [1]
-    s = completeTicket(s, 1);
-    return s.calling.length === 0 && s.done.join(',') === '1';
-  })());
-
-  check('completeTicket は呼び出し中に無い番号なら変化しない', (() => {
-    let s = callTicket(issueTicket(initialState()), 1);
-    const s2 = completeTicket(s, 99);
-    return s2.calling.join(',') === '1' && s2.done.length === 0;
-  })());
-
-  check('backToWaiting は呼び出し中→待機へ戻す', (() => {
-    let s = callTicket(issueTicket(initialState()), 1); // calling [1]
+  check('backToWaiting は待機に戻し案内時刻をクリア', (() => {
+    let s = callTicket(issueTicket(initialState(), 1, T1), 1, T2);
     s = backToWaiting(s, 1);
-    return s.calling.length === 0 && s.waiting.join(',') === '1';
+    const t = findTicket(s, 1);
+    return t.status === 'waiting' && t.calledAt === null;
   })());
 
-  check('backToWaiting は待機を昇順に保つ', (() => {
-    let s = issueTicket(issueTicket(issueTicket(initialState()))); // waiting [1,2,3]
-    s = callTicket(s, 1);
-    s = backToWaiting(s, 1);
-    return s.waiting.join(',') === '1,2,3';
-  })());
-
-  check('backToWaiting は呼び出し中に無い番号なら変化しない', (() => {
-    let s = callTicket(issueTicket(initialState()), 1);
-    const s2 = backToWaiting(s, 99);
-    return s2.calling.join(',') === '1' && s2.waiting.length === 0;
-  })());
-
-  check('recallTicket は完了→呼び出し中へ戻す', (() => {
-    let s = completeTicket(callTicket(issueTicket(initialState()), 1), 1); // done [1]
+  check('recallTicket は完了→呼び出し中へ戻し完了時刻をクリア', (() => {
+    let s = completeTicket(callTicket(issueTicket(initialState(), 1, T1), 1, T2), 1, T3);
     s = recallTicket(s, 1);
-    return s.done.length === 0 && s.calling.join(',') === '1';
+    const t = findTicket(s, 1);
+    return t.status === 'calling' && t.completedAt === null;
   })());
 
-  check('recallTicket は完了に無い番号なら変化しない', (() => {
-    let s = completeTicket(callTicket(issueTicket(initialState()), 1), 1);
-    const s2 = recallTicket(s, 99);
-    return s2.done.join(',') === '1' && s2.calling.length === 0;
+  check('ticketsByStatus は該当ステータスを番号順で返す', (() => {
+    let s = issueTicket(issueTicket(issueTicket(initialState(), 1, T1), 1, T1), 1, T1);
+    s = callTicket(s, 2, T2);
+    const waiting = ticketsByStatus(s, 'waiting').map((t) => t.number).join(',');
+    const calling = ticketsByStatus(s, 'calling').map((t) => t.number).join(',');
+    return waiting === '1,3' && calling === '2';
+  })());
+
+  check('hourlySummary は時間帯ごとに組数と人数を集計', (() => {
+    let s = issueTicket(initialState(), 2, T1);   // 12時台
+    s = issueTicket(s, 3, T2);                    // 12時台
+    s = issueTicket(s, 4, T3);                    // 13時台
+    const sum = hourlySummary(s);
+    return sum.length === 2 &&
+           sum[0].groups === 2 && sum[0].guests === 5 &&
+           sum[1].groups === 1 && sum[1].guests === 4;
   })());
 
   check('resetState は初期状態を返す', (() => {
     const s = resetState();
-    return s.lastIssued === 0 && s.waiting.length === 0 && s.calling.length === 0 && s.done.length === 0;
+    return s.lastIssued === 0 && s.tickets.length === 0;
   })());
 </script>
 </body>
