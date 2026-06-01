@@ -363,6 +363,7 @@
       document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.screen).classList.add('active');
+      if (btn.dataset.screen === 'settings') renderPreview();
     });
   });
 
