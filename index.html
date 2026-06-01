@@ -63,6 +63,16 @@
   table.report th, table.report td { border: 1px solid #ddd; padding: 6px 12px; font-size: 14px; }
   table.report th { background: #f3f4f6; }
   .csv-btn { font-size: 16px; padding: 12px 24px; margin: 16px; border: none; border-radius: 8px; background: #16a34a; color: #fff; cursor: pointer; }
+
+  /* 設定画面 */
+  .settings-form { display: inline-flex; flex-direction: column; gap: 12px; text-align: left; max-width: 420px; }
+  .settings-form label { font-size: 14px; }
+  .settings-form input[type="text"] { width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box; }
+  .settings-form label.checkbox { display: flex; align-items: center; gap: 8px; }
+  .ticket-preview { display: inline-block; }
+  .ticket-preview canvas { border: 1px solid #ccc; max-width: 100%; }
+  .printer-controls { margin-top: 8px; }
+  #printer-status { color: #666; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -71,6 +81,7 @@
   <button data-screen="admin">呼び出し管理</button>
   <button data-screen="display">呼び出し表示 / Display</button>
   <button data-screen="report">記録・集計</button>
+  <button data-screen="settings">設定 / Settings</button>
 </nav>
 
 <section id="reception" class="screen active">
@@ -146,9 +157,50 @@
   </table>
 </section>
 
+<section id="settings" class="screen">
+  <h2>印刷設定 / Print Settings</h2>
+  <div class="settings-form">
+    <label>店名 / Store name<br><input id="set-storeName" type="text" maxlength="40"></label>
+    <label>ヘッダー文 / Header<br><input id="set-headerMessage" type="text" maxlength="40"></label>
+    <label>フッター文 / Footer<br><input id="set-footerMessage" type="text" maxlength="40"></label>
+    <label>QRリンク先URL / QR link<br><input id="set-qrUrl" type="text" maxlength="200" placeholder="空ならQRを印字しません"></label>
+    <label class="checkbox"><input id="set-showWaitEstimate" type="checkbox"> 予想待ち時間を印字する</label>
+    <button id="save-settings-btn" class="secondary">設定を保存</button>
+  </div>
+
+  <h3>プレビュー / Preview</h3>
+  <div id="ticket-preview" class="ticket-preview"></div>
+
+  <h3>プリンター / Printer</h3>
+  <div class="printer-controls">
+    <button id="connect-usb-btn" class="secondary">USB接続</button>
+    <button id="connect-bt-btn" class="secondary">Bluetooth接続</button>
+    <button id="test-print-btn" class="secondary">テスト印刷</button>
+    <p id="printer-status">プリンター: 未接続</p>
+  </div>
+</section>
+
 <script src="queue.js"></script>
+<script src="printer.js"></script>
 <script>
   const STORAGE_KEY = 'seiriken-state';
+  const PRINT_SETTINGS_KEY = 'seiriken-print-settings';
+  const DEFAULT_PRINT_SETTINGS = { storeName: '', headerMessage: '', footerMessage: '', qrUrl: '', showWaitEstimate: true };
+
+  function loadPrintSettings() {
+    try {
+      const raw = localStorage.getItem(PRINT_SETTINGS_KEY);
+      if (!raw) return Object.assign({}, DEFAULT_PRINT_SETTINGS);
+      const s = JSON.parse(raw);
+      return Object.assign({}, DEFAULT_PRINT_SETTINGS, s);
+    } catch (e) {
+      return Object.assign({}, DEFAULT_PRINT_SETTINGS);
+    }
+  }
+  function savePrintSettings(s) {
+    localStorage.setItem(PRINT_SETTINGS_KEY, JSON.stringify(s));
+  }
+  let printSettings = loadPrintSettings();
   const STATUS_LABEL = { waiting: '待機', calling: '呼び出し中', done: '完了' };
 
   function loadState() {
@@ -311,6 +363,7 @@
       document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.screen).classList.add('active');
+      if (btn.dataset.screen === 'settings') renderPreview();
     });
   });
 
@@ -334,11 +387,16 @@
 
   document.getElementById('issue-btn').addEventListener('click', () => {
     const waitMs = estimatedWaitMsForNew(state);
+    const issuedPartySize = partySize;
     update(issueTicket(state, partySize, Date.now()));
     document.getElementById('issued-label').textContent = 'あなたの番号は / Your number is';
-    document.getElementById('issued-number').textContent = state.lastIssued + '（' + partySize + '名）';
+    document.getElementById('issued-number').textContent = state.lastIssued + '（' + issuedPartySize + '名）';
     document.getElementById('reception-wait').textContent =
       'お待ち時間 / Wait: ' + fmtWait(waitMs);
+    if (transport) {
+      printTicket({ number: state.lastIssued, partySize: issuedPartySize, issuedAt: Date.now(), waitMs: waitMs })
+        .catch((e) => alert('印刷に失敗: ' + e.message));
+    }
     partySize = 1;
     renderPartySize();
   });
@@ -378,6 +436,164 @@
     }
   });
 
+  // ===== プリンター接続（実機・Chrome/Edge専用、手動検証） =====
+  let transport = null;        // 'usb' | 'bt' | null
+  let usbDevice = null, usbEpOut = 0;
+  let btChar = null;
+  const BT_SERVICE = '000018f0-0000-1000-8000-00805f9b34fb'; // 汎用シリアルサービス（機種により要調整）
+  const BT_CHAR = '00002af1-0000-1000-8000-00805f9b34fb';    // 書き込み特性（機種により要調整）
+
+  function setPrinterStatus(text) {
+    document.getElementById('printer-status').textContent = 'プリンター: ' + text;
+  }
+
+  async function connectUsb() {
+    if (!navigator.usb) { alert('このブラウザはWebUSB非対応です（Chrome/Edgeをお使いください）'); return; }
+    usbDevice = await navigator.usb.requestDevice({ filters: [] });
+    await usbDevice.open();
+    if (usbDevice.configuration === null) await usbDevice.selectConfiguration(1);
+    const iface = usbDevice.configuration.interfaces.find((i) =>
+      i.alternate.endpoints.some((e) => e.direction === 'out'));
+    if (!iface) throw new Error('出力エンドポイントが見つかりません');
+    await usbDevice.claimInterface(iface.interfaceNumber);
+    usbEpOut = iface.alternate.endpoints.find((e) => e.direction === 'out').endpointNumber;
+    transport = 'usb';
+    setPrinterStatus('USB接続済み');
+  }
+
+  async function connectBluetooth() {
+    if (!navigator.bluetooth) { alert('このブラウザはWeb Bluetooth非対応です（Chrome/Edgeをお使いください）'); return; }
+    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [BT_SERVICE] }] });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(BT_SERVICE);
+    btChar = await service.getCharacteristic(BT_CHAR);
+    transport = 'bt';
+    setPrinterStatus('Bluetooth接続済み');
+  }
+
+  async function sendBytes(bytes) {
+    if (transport === 'usb') {
+      await usbDevice.transferOut(usbEpOut, bytes);
+    } else if (transport === 'bt') {
+      for (let i = 0; i < bytes.length; i += 100) {
+        await btChar.writeValueWithoutResponse(bytes.slice(i, i + 100));
+      }
+    } else {
+      throw new Error('プリンター未接続');
+    }
+  }
+
+  async function printTicket(ticketData) {
+    const canvas = renderTicketCanvas(ticketData, printSettings);
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const mono = imageDataToMonoBitmap({ width: imageData.width, height: imageData.height, data: imageData.data }, 128);
+    const commands = buildTicketCommands({ rasterBitmap: mono, qrText: printSettings.qrUrl });
+    await sendBytes(commands);
+  }
+
+  // ticketData = { number, partySize, issuedAt, waitMs }
+  // 80mm幅（576px）の canvas にレイアウトを描画して返す。QRは描画しない（ネイティブ命令で印字）。
+  function renderTicketCanvas(ticketData, settings) {
+    const W = 576;
+    const PAD = 16;
+    const items = [];
+    if (settings.storeName) items.push({ text: settings.storeName, font: 'bold 40px sans-serif', h: 52 });
+    if (settings.headerMessage) items.push({ text: settings.headerMessage, font: '24px sans-serif', h: 32 });
+    items.push({ divider: true, h: 20 });
+    items.push({ text: '整理券 / TICKET', font: '24px sans-serif', h: 36 });
+    items.push({ text: String(ticketData.number), font: 'bold 140px sans-serif', h: 150 });
+    items.push({ text: ticketData.partySize + '名様', font: '32px sans-serif', h: 44 });
+    const d = new Date(ticketData.issuedAt);
+    const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    items.push({ text: '発券 ' + hhmm, font: '24px sans-serif', h: 34 });
+    if (settings.showWaitEstimate && ticketData.waitMs !== null && ticketData.waitMs !== undefined) {
+      const min = Math.max(1, Math.round(ticketData.waitMs / 60000));
+      items.push({ text: '予想待ち 約' + min + '分', font: 'bold 28px sans-serif', h: 40 });
+    }
+    if (settings.footerMessage) {
+      items.push({ divider: true, h: 20 });
+      items.push({ text: settings.footerMessage, font: '22px sans-serif', h: 30 });
+    }
+
+    let total = PAD * 2;
+    items.forEach((it) => { total += it.h; });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = total;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, total);
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    let y = PAD;
+    items.forEach((it) => {
+      if (it.divider) {
+        ctx.save();
+        ctx.strokeStyle = '#000';
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(PAD, y + it.h / 2);
+        ctx.lineTo(W - PAD, y + it.h / 2);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.font = it.font;
+        ctx.fillText(it.text, W / 2, y);
+      }
+      y += it.h;
+    });
+    return canvas;
+  }
+  function sampleTicketData() {
+    const next = (state.lastIssued | 0) + 1;
+    return { number: next, partySize: 2, issuedAt: Date.now(), waitMs: estimatedWaitMsForNew(state) };
+  }
+  function renderPreview() {
+    const box = document.getElementById('ticket-preview');
+    clearChildren(box);
+    const canvas = renderTicketCanvas(sampleTicketData(), printSettings);
+    box.appendChild(canvas);
+    if (printSettings.qrUrl) {
+      const ph = document.createElement('div');
+      ph.textContent = '［QR印字位置: ' + printSettings.qrUrl + '］';
+      ph.style.cssText = 'font-size:12px;color:#666;border:1px dashed #999;padding:8px;margin-top:4px;width:576px;max-width:100%;box-sizing:border-box;text-align:center;';
+      box.appendChild(ph);
+    }
+  }
+  function fillSettingsForm() {
+    document.getElementById('set-storeName').value = printSettings.storeName;
+    document.getElementById('set-headerMessage').value = printSettings.headerMessage;
+    document.getElementById('set-footerMessage').value = printSettings.footerMessage;
+    document.getElementById('set-qrUrl').value = printSettings.qrUrl;
+    document.getElementById('set-showWaitEstimate').checked = printSettings.showWaitEstimate;
+  }
+  document.getElementById('save-settings-btn').addEventListener('click', () => {
+    printSettings = {
+      storeName: document.getElementById('set-storeName').value,
+      headerMessage: document.getElementById('set-headerMessage').value,
+      footerMessage: document.getElementById('set-footerMessage').value,
+      qrUrl: document.getElementById('set-qrUrl').value,
+      showWaitEstimate: document.getElementById('set-showWaitEstimate').checked,
+    };
+    savePrintSettings(printSettings);
+    renderPreview();
+    alert('設定を保存しました');
+  });
+  fillSettingsForm();
+  renderPreview();
+  document.getElementById('connect-usb-btn').addEventListener('click', () => {
+    connectUsb().catch((e) => { setPrinterStatus('接続失敗'); alert('USB接続に失敗: ' + e.message); });
+  });
+  document.getElementById('connect-bt-btn').addEventListener('click', () => {
+    connectBluetooth().catch((e) => { setPrinterStatus('接続失敗'); alert('Bluetooth接続に失敗: ' + e.message); });
+  });
+  document.getElementById('test-print-btn').addEventListener('click', () => {
+    printTicket(sampleTicketData()).catch((e) => alert('印刷に失敗: ' + e.message));
+  });
   renderPartySize();
   render();
 </script>

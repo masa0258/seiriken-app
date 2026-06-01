@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>printer.js tests</title></head>
+<body>
+<h1>printer.js テスト結果</h1>
+<ul id="results"></ul>
+<script src="printer.js"></script>
+<script>
+  const results = document.getElementById('results');
+  function check(name, cond) {
+    const li = document.createElement('li');
+    li.textContent = (cond ? 'PASS: ' : 'FAIL: ') + name;
+    li.style.color = cond ? 'green' : 'red';
+    results.appendChild(li);
+  }
+  function bytesEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+  function includesSeq(arr, sub) {
+    for (let i = 0; i + sub.length <= arr.length; i++) {
+      let ok = true;
+      for (let j = 0; j < sub.length; j++) if (arr[i + j] !== sub[j]) { ok = false; break; }
+      if (ok) return true;
+    }
+    return false;
+  }
+
+  check('escposInit は ESC @', bytesEqual(escposInit(), new Uint8Array([0x1B, 0x40])));
+  check('escposFeed(3) は ESC d 3', bytesEqual(escposFeed(3), new Uint8Array([0x1B, 0x64, 3])));
+  check('escposCut は GS V 0', bytesEqual(escposCut(), new Uint8Array([0x1D, 0x56, 0x00])));
+  check('escposQR("AB") は GS ( k のモデル/サイズ/誤り訂正/格納/印字列', bytesEqual(
+    escposQR('AB', { size: 6, ec: 'M' }),
+    new Uint8Array([
+      0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00, // モデル2
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x06,       // セルサイズ6
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31,       // 誤り訂正M(49)
+      0x1D, 0x28, 0x6B, 0x05, 0x00, 0x31, 0x50, 0x30, 0x41, 0x42, // 格納 "AB"
+      0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30        // 印字
+    ])
+  ));
+  check('escposQR の格納長は データ長+3', (() => {
+    const bytes = escposQR('ABCD', {});            // 4バイト → 格納pL=7
+    return includesSeq(Array.from(bytes), [0x1D, 0x28, 0x6B, 0x07, 0x00, 0x31, 0x50, 0x30, 0x41, 0x42, 0x43, 0x44]);
+  })());
+
+  check('imageDataToMonoBitmap は黒=ビット1で1bpp化（8x1交互）', (() => {
+    // 8px: 黒,白,黒,白,黒,白,黒,白 → 10101010 = 0xAA
+    const data = new Uint8ClampedArray(8 * 4);
+    for (let x = 0; x < 8; x++) {
+      const v = (x % 2 === 0) ? 0 : 255; // 偶数=黒
+      data[x * 4] = v; data[x * 4 + 1] = v; data[x * 4 + 2] = v; data[x * 4 + 3] = 255;
+    }
+    const mb = imageDataToMonoBitmap({ width: 8, height: 1, data: data }, 128);
+    return mb.width === 8 && mb.height === 1 && mb.data.length === 1 && mb.data[0] === 0xAA;
+  })());
+
+  check('imageDataToMonoBitmap は行をバイト境界に詰める（2x2全黒）', (() => {
+    const data = new Uint8ClampedArray(2 * 2 * 4);
+    for (let i = 0; i < 4; i++) { data[i * 4] = 0; data[i * 4 + 1] = 0; data[i * 4 + 2] = 0; data[i * 4 + 3] = 255; }
+    const mb = imageDataToMonoBitmap({ width: 2, height: 2, data: data }, 128);
+    // stride = ceil(2/8)=1, 各行 0b11000000 = 0xC0
+    return mb.data.length === 2 && mb.data[0] === 0xC0 && mb.data[1] === 0xC0;
+  })());
+
+  check('imageDataToMonoBitmap は透明を白扱い', (() => {
+    const data = new Uint8ClampedArray(8 * 4); // 全0（黒・alpha0）
+    const mb = imageDataToMonoBitmap({ width: 8, height: 1, data: data }, 128);
+    return mb.data[0] === 0x00; // alpha0 は白 → 全ビット0
+  })());
+
+  check('escposRaster は GS v 0 ヘッダ＋画素を返す', (() => {
+    const mb = { width: 8, height: 1, data: new Uint8Array([0xAA]) };
+    return bytesEqual(escposRaster(mb), new Uint8Array([0x1D, 0x76, 0x30, 0x00, 0x01, 0x00, 0x01, 0x00, 0xAA]));
+  })());
+  check('escposRaster のヘッダは横バイト数と縦ドット数を正しく持つ', (() => {
+    // width=16 → stride=2, height=3
+    const mb = { width: 16, height: 3, data: new Uint8Array(2 * 3) };
+    const out = escposRaster(mb);
+    // header: 1D 76 30 00 xL=2 xH=0 yL=3 yH=0
+    return out[4] === 0x02 && out[5] === 0x00 && out[6] === 0x03 && out[7] === 0x00 && out.length === 8 + 6;
+  })());
+
+  check('buildTicketCommands は init で始まり cut で終わる', (() => {
+    const mb = { width: 8, height: 1, data: new Uint8Array([0xAA]) };
+    const out = buildTicketCommands({ rasterBitmap: mb, qrText: 'AB' });
+    return out[0] === 0x1B && out[1] === 0x40 &&
+           out[out.length - 3] === 0x1D && out[out.length - 2] === 0x56 && out[out.length - 1] === 0x00;
+  })());
+  check('buildTicketCommands は qrText 有りでQRブロックを含む', (() => {
+    const mb = { width: 8, height: 1, data: new Uint8Array([0xAA]) };
+    const out = Array.from(buildTicketCommands({ rasterBitmap: mb, qrText: 'AB' }));
+    return includesSeq(out, [0x1D, 0x28, 0x6B]) && includesSeq(out, [0x1B, 0x61, 0x01]); // QR命令＋中央寄せ
+  })());
+  check('buildTicketCommands は qrText 空でQRブロックを含まない', (() => {
+    const mb = { width: 8, height: 1, data: new Uint8Array([0xAA]) };
+    const out = Array.from(buildTicketCommands({ rasterBitmap: mb, qrText: '' }));
+    return !includesSeq(out, [0x1D, 0x28, 0x6B]);
+  })());
+</script>
+</body>
+</html>
