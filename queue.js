@@ -108,3 +108,10 @@ function estimatedWaitMs(state, number, sampleSize = 5) {
   ).length;
   return interval * (ahead + 1);
 }
+
+function estimatedWaitMsForNew(state, sampleSize = 5) {
+  const interval = averageServeInterval(state, sampleSize);
+  if (interval === null) return null;
+  const waitingCount = state.tickets.filter((t) => t.status === 'waiting').length;
+  return interval * (waitingCount + 1);
+}
