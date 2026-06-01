@@ -116,6 +116,19 @@
     // 平均 = (5分 + 6分) / 2 = 5.5分
     return averageServeInterval(s) === 5.5 * 60000;
   })());
+
+  check('estimatedWaitMs は案内実績なしなら null', (() => {
+    const s = issueTicket(issueTicket(initialState(), 1, C1), 1, C1);
+    return estimatedWaitMs(s, 2) === null;
+  })());
+
+  check('estimatedWaitMs は前の待機組が多いほど長い', (() => {
+    let s = issueTicket(issueTicket(issueTicket(issueTicket(initialState(), 1, C1), 1, C1), 1, C1), 1, C1);
+    s = callTicket(s, 1, C1); // 12:00
+    s = callTicket(s, 2, C2); // 12:05 → interval平均 5分
+    // 待機は 3,4。3の前の待機組は0 → 5分×(0+1)=5分。4の前は1組(3) → 5分×(1+1)=10分
+    return estimatedWaitMs(s, 3) === 5 * 60000 && estimatedWaitMs(s, 4) === 10 * 60000;
+  })());
 </script>
 </body>
 </html>

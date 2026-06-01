@@ -99,3 +99,12 @@ function averageServeInterval(state, sampleSize = 5) {
   const sum = recent.reduce((acc, v) => acc + v, 0);
   return sum / recent.length;
 }
+
+function estimatedWaitMs(state, number, sampleSize = 5) {
+  const interval = averageServeInterval(state, sampleSize);
+  if (interval === null) return null;
+  const ahead = state.tickets.filter(
+    (t) => t.status === 'waiting' && t.number < number
+  ).length;
+  return interval * (ahead + 1);
+}
