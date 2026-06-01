@@ -41,3 +41,15 @@ function buildPublicStatus(state) {
     avg_serve_ms: avg,
   };
 }
+
+function computeAhead(waitingNumbers, myNumber) {
+  const list = Array.isArray(waitingNumbers) ? waitingNumbers : [];
+  if (list.indexOf(myNumber) === -1) {
+    return { found: false, ahead: 0 };
+  }
+  let ahead = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] < myNumber) ahead++;
+  }
+  return { found: true, ahead: ahead };
+}

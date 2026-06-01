@@ -62,6 +62,18 @@
     const s = buildPublicStatus({ lastIssued: 7, tickets: tickets });
     check('buildPublicStatus: recent_called は最大5件に制限', s.recent_called.length === 5 && arrEqual(s.recent_called, [7, 6, 5, 4, 3]));
   })();
+
+  (function () {
+    const w = [40, 42, 43, 45];
+    const r1 = computeAhead(w, 43);
+    check('computeAhead: 自分(43)の前は2組', r1.found === true && r1.ahead === 2);
+    const r2 = computeAhead(w, 40);
+    check('computeAhead: 先頭(40)の前は0組', r2.found === true && r2.ahead === 0);
+    const r3 = computeAhead(w, 99);
+    check('computeAhead: 不在番号は found:false, ahead:0', r3.found === false && r3.ahead === 0);
+    const r4 = computeAhead([], 5);
+    check('computeAhead: 空配列は found:false', r4.found === false && r4.ahead === 0);
+  })();
 </script>
 </body>
 </html>
