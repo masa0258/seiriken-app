@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>printer.js tests</title></head>
+<body>
+<h1>printer.js テスト結果</h1>
+<ul id="results"></ul>
+<script src="printer.js"></script>
+<script>
+  const results = document.getElementById('results');
+  function check(name, cond) {
+    const li = document.createElement('li');
+    li.textContent = (cond ? 'PASS: ' : 'FAIL: ') + name;
+    li.style.color = cond ? 'green' : 'red';
+    results.appendChild(li);
+  }
+  function bytesEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+  function includesSeq(arr, sub) {
+    for (let i = 0; i + sub.length <= arr.length; i++) {
+      let ok = true;
+      for (let j = 0; j < sub.length; j++) if (arr[i + j] !== sub[j]) { ok = false; break; }
+      if (ok) return true;
+    }
+    return false;
+  }
+
+  check('escposInit は ESC @', bytesEqual(escposInit(), new Uint8Array([0x1B, 0x40])));
+  check('escposFeed(3) は ESC d 3', bytesEqual(escposFeed(3), new Uint8Array([0x1B, 0x64, 3])));
+  check('escposCut は GS V 0', bytesEqual(escposCut(), new Uint8Array([0x1D, 0x56, 0x00])));
+</script>
+</body>
+</html>
