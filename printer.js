@@ -79,3 +79,19 @@ function escposRaster(monoBitmap) {
   ]);
   return concatBytes(header, monoBitmap.data);
 }
+
+// チケット印刷の完成バイト列を組み立てる。
+// init → ラスター →（qrText有り: 中央寄せ＋QR＋左寄せ）→ 紙送り → カット
+function buildTicketCommands(args) {
+  const rasterBitmap = args.rasterBitmap;
+  const qrText = args.qrText;
+  const parts = [escposInit(), escposRaster(rasterBitmap)];
+  if (qrText) {
+    parts.push(new Uint8Array([0x1B, 0x61, 0x01])); // ESC a 1（中央寄せ）
+    parts.push(escposQR(qrText, {}));
+    parts.push(new Uint8Array([0x1B, 0x61, 0x00])); // ESC a 0（左寄せ）
+  }
+  parts.push(escposFeed(3));
+  parts.push(escposCut());
+  return concatBytes.apply(null, parts);
+}
