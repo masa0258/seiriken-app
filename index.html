@@ -101,7 +101,7 @@
 </section>
 
 <section id="admin" class="screen">
-  <h2>呼び出し管理</h2>
+  <h2 id="admin-title">呼び出し管理</h2>
   <div class="status-cols">
     <div class="status-col col-waiting">
       <h3>待機</h3>
@@ -158,6 +158,7 @@
 </section>
 
 <section id="settings" class="screen">
+  <button id="settings-close" class="secondary">← 設定を閉じる</button>
   <h2>印刷設定 / Print Settings</h2>
   <div class="settings-form">
     <label>店名 / Store name<br><input id="set-storeName" type="text" maxlength="40"></label>
@@ -165,6 +166,7 @@
     <label>フッター文 / Footer<br><input id="set-footerMessage" type="text" maxlength="40"></label>
     <label>QRリンク先URL / QR link<br><input id="set-qrUrl" type="text" maxlength="200" placeholder="空ならQRを印字しません"></label>
     <label class="checkbox"><input id="set-showWaitEstimate" type="checkbox"> 予想待ち時間を印字する</label>
+    <label>設定PIN（4桁）<br><input id="set-pin" type="text" inputmode="numeric" maxlength="4" placeholder="0000"></label>
     <button id="save-settings-btn" class="secondary">設定を保存</button>
   </div>
 
@@ -197,7 +199,7 @@
 <script>
   const STORAGE_KEY = 'seiriken-state';
   const PRINT_SETTINGS_KEY = 'seiriken-print-settings';
-  const DEFAULT_PRINT_SETTINGS = { storeName: '', headerMessage: '', footerMessage: '', qrUrl: '', showWaitEstimate: true };
+  const DEFAULT_PRINT_SETTINGS = { storeName: '', headerMessage: '', footerMessage: '', qrUrl: '', showWaitEstimate: true, pin: '0000' };
   const DEFAULT_SUPABASE_URL = 'https://gfnpoamqcwydgxiwrcbj.supabase.co';
   const DEFAULT_SUPABASE_ANON = 'sb_publishable_o-b8b8jo0BYqNXm2I-bLXQ_F4nKUm_k';
   const SYNC_SETTINGS_KEY = 'seiriken-sync-settings';
@@ -403,7 +405,7 @@
   const MODE_SCREENS = {
     reception: ['reception'],
     display: ['display'],
-    staff: ['admin', 'report', 'settings'],
+    staff: ['admin', 'report'],
   };
   function applyMode(mode) {
     const allowed = MODE_SCREENS[mode] || MODE_SCREENS.reception;
@@ -423,6 +425,36 @@
     if (activeBtn) activeBtn.classList.add('active');
   }
   applyMode(MODE);
+  function openSettings() {
+    const nav = document.querySelector('nav');
+    if (nav) nav.style.display = 'none';
+    document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 'settings'));
+    fillSettingsForm();
+    renderPreview();
+  }
+  function closeSettings() {
+    document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 'admin'));
+    const nav = document.querySelector('nav');
+    if (nav) nav.style.display = '';
+  }
+  function askPin() {
+    const input = prompt('設定PINを入力してください');
+    if (input === null) return;
+    if (input === (printSettings.pin || '0000')) openSettings();
+    else alert('PINが違います');
+  }
+  (function attachHiddenSettings() {
+    const title = document.getElementById('admin-title');
+    if (!title) return;
+    let timer = null;
+    const start = () => { if (timer) clearTimeout(timer); timer = setTimeout(askPin, 2000); };
+    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    title.addEventListener('mousedown', start);
+    title.addEventListener('touchstart', start, { passive: true });
+    ['mouseup', 'mouseleave', 'touchend', 'touchcancel', 'touchmove'].forEach((ev) => title.addEventListener(ev, cancel));
+    const closeBtn = document.getElementById('settings-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeSettings);
+  })();
 
   async function publishStatus(config, status) {
     const base = config.supabaseUrl.replace(/\/+$/, '');
@@ -667,6 +699,7 @@
     document.getElementById('set-footerMessage').value = printSettings.footerMessage;
     document.getElementById('set-qrUrl').value = printSettings.qrUrl;
     document.getElementById('set-showWaitEstimate').checked = printSettings.showWaitEstimate;
+    document.getElementById('set-pin').value = printSettings.pin || '0000';
     document.getElementById('sync-enabled').checked = syncSettings.enabled;
     document.getElementById('sync-url').value = syncSettings.supabaseUrl;
     document.getElementById('sync-anon').value = syncSettings.anonKey;
@@ -679,6 +712,7 @@
       footerMessage: document.getElementById('set-footerMessage').value,
       qrUrl: document.getElementById('set-qrUrl').value,
       showWaitEstimate: document.getElementById('set-showWaitEstimate').checked,
+      pin: document.getElementById('set-pin').value || '0000',
     };
     savePrintSettings(printSettings);
     renderPreview();
