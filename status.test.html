@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>status.js tests</title></head>
+<body>
+<h1>status.js テスト結果</h1>
+<ul id="results"></ul>
+<script src="queue.js"></script>
+<script src="status.js"></script>
+<script>
+  const results = document.getElementById('results');
+  function check(name, cond) {
+    const li = document.createElement('li');
+    li.textContent = (cond ? 'PASS: ' : 'FAIL: ') + name;
+    li.style.color = cond ? 'green' : 'red';
+    results.appendChild(li);
+  }
+  function arrEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  // 共通サンプル: 36,37 は完了、38 は呼び出し中、40,42,43 は待機
+  function sampleState() {
+    return {
+      lastIssued: 43,
+      tickets: [
+        { number: 36, partySize: 2, status: 'done',    issuedAt: 1000, calledAt: 5000, completedAt: 6000 },
+        { number: 37, partySize: 1, status: 'done',    issuedAt: 1100, calledAt: 6000, completedAt: 7000 },
+        { number: 38, partySize: 3, status: 'calling', issuedAt: 1200, calledAt: 7000, completedAt: null },
+        { number: 40, partySize: 1, status: 'waiting', issuedAt: 1300, calledAt: null, completedAt: null },
+        { number: 42, partySize: 2, status: 'waiting', issuedAt: 1400, calledAt: null, completedAt: null },
+        { number: 43, partySize: 1, status: 'waiting', issuedAt: 1500, calledAt: null, completedAt: null },
+      ],
+    };
+  }
+
+  (function () {
+    const s = buildPublicStatus(sampleState());
+    check('buildPublicStatus: calling_number は最後にcalledされた呼出中番号(38)', s.calling_number === 38);
+    check('buildPublicStatus: recent_called は calledAt降順・最大5件', arrEqual(s.recent_called, [38, 37, 36]));
+    check('buildPublicStatus: waiting_numbers は昇順', arrEqual(s.waiting_numbers, [40, 42, 43]));
+    check('buildPublicStatus: waiting_count は待機件数(3)', s.waiting_count === 3);
+    check('buildPublicStatus: last_issued は state.lastIssued(43)', s.last_issued === 43);
+    // 案内間隔: calledAt [5000,6000,7000] → 間隔 [1000,1000] → 平均 1000
+    check('buildPublicStatus: avg_serve_ms は averageServeInterval(=1000)', s.avg_serve_ms === 1000);
+  })();
+
+  (function () {
+    const s = buildPublicStatus({ lastIssued: 0, tickets: [] });
+    check('buildPublicStatus: 空stateで calling_number=null', s.calling_number === null);
+    check('buildPublicStatus: 空stateで waiting_numbers=[]', arrEqual(s.waiting_numbers, []));
+    check('buildPublicStatus: 空stateで avg_serve_ms=null', s.avg_serve_ms === null);
+  })();
+
+  (function () {
+    // recent_called が6件以上でも最大5件
+    const tickets = [];
+    for (let i = 1; i <= 7; i++) {
+      tickets.push({ number: i, partySize: 1, status: 'done', issuedAt: i, calledAt: i * 100, completedAt: i * 100 + 50 });
+    }
+    const s = buildPublicStatus({ lastIssued: 7, tickets: tickets });
+    check('buildPublicStatus: recent_called は最大5件に制限', s.recent_called.length === 5 && arrEqual(s.recent_called, [7, 6, 5, 4, 3]));
+  })();
+
+  (function () {
+    const w = [40, 42, 43, 45];
+    const r1 = computeAhead(w, 43);
+    check('computeAhead: 自分(43)の前は2組', r1.found === true && r1.ahead === 2);
+    const r2 = computeAhead(w, 40);
+    check('computeAhead: 先頭(40)の前は0組', r2.found === true && r2.ahead === 0);
+    const r3 = computeAhead(w, 99);
+    check('computeAhead: 不在番号は found:false, ahead:0', r3.found === false && r3.ahead === 0);
+    const r4 = computeAhead([], 5);
+    check('computeAhead: 空配列は found:false', r4.found === false && r4.ahead === 0);
+  })();
+
+  (function () {
+    check('estimateWaitMsForNumber: 3組×1000ms=3000', estimateWaitMsForNumber(3, 1000) === 3000);
+    check('estimateWaitMsForNumber: 0組は0', estimateWaitMsForNumber(0, 1000) === 0);
+    check('estimateWaitMsForNumber: avg=null は null', estimateWaitMsForNumber(3, null) === null);
+    check('estimateWaitMsForNumber: avg=0 は null', estimateWaitMsForNumber(3, 0) === null);
+  })();
+
+  (function () {
+    // 非破壊チェック
+    const state = sampleState();
+    const before = JSON.stringify(state);
+    buildPublicStatus(state);
+    check('buildPublicStatus は state を破壊しない', JSON.stringify(state) === before);
+
+    const w = [40, 42, 43];
+    const wBefore = JSON.stringify(w);
+    computeAhead(w, 42);
+    check('computeAhead は引数配列を破壊しない', JSON.stringify(w) === wBefore);
+  })();
+</script>
+</body>
+</html>
