@@ -63,6 +63,16 @@
   table.report th, table.report td { border: 1px solid #ddd; padding: 6px 12px; font-size: 14px; }
   table.report th { background: #f3f4f6; }
   .csv-btn { font-size: 16px; padding: 12px 24px; margin: 16px; border: none; border-radius: 8px; background: #16a34a; color: #fff; cursor: pointer; }
+
+  /* 設定画面 */
+  .settings-form { display: inline-flex; flex-direction: column; gap: 12px; text-align: left; max-width: 420px; }
+  .settings-form label { font-size: 14px; }
+  .settings-form input[type="text"] { width: 100%; padding: 8px; font-size: 16px; box-sizing: border-box; }
+  .settings-form label.checkbox { display: flex; align-items: center; gap: 8px; }
+  .ticket-preview { display: inline-block; }
+  .ticket-preview canvas { border: 1px solid #ccc; max-width: 100%; }
+  .printer-controls { margin-top: 8px; }
+  #printer-status { color: #666; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -71,6 +81,7 @@
   <button data-screen="admin">呼び出し管理</button>
   <button data-screen="display">呼び出し表示 / Display</button>
   <button data-screen="report">記録・集計</button>
+  <button data-screen="settings">設定 / Settings</button>
 </nav>
 
 <section id="reception" class="screen active">
@@ -146,9 +157,49 @@
   </table>
 </section>
 
+<section id="settings" class="screen">
+  <h2>印刷設定 / Print Settings</h2>
+  <div class="settings-form">
+    <label>店名 / Store name<br><input id="set-storeName" type="text" maxlength="40"></label>
+    <label>ヘッダー文 / Header<br><input id="set-headerMessage" type="text" maxlength="40"></label>
+    <label>フッター文 / Footer<br><input id="set-footerMessage" type="text" maxlength="40"></label>
+    <label>QRリンク先URL / QR link<br><input id="set-qrUrl" type="text" maxlength="200" placeholder="空ならQRを印字しません"></label>
+    <label class="checkbox"><input id="set-showWaitEstimate" type="checkbox"> 予想待ち時間を印字する</label>
+    <button id="save-settings-btn" class="secondary">設定を保存</button>
+  </div>
+
+  <h3>プレビュー / Preview</h3>
+  <div id="ticket-preview" class="ticket-preview"></div>
+
+  <h3>プリンター / Printer</h3>
+  <div class="printer-controls">
+    <button id="connect-usb-btn" class="secondary">USB接続</button>
+    <button id="connect-bt-btn" class="secondary">Bluetooth接続</button>
+    <button id="test-print-btn" class="secondary">テスト印刷</button>
+    <p id="printer-status">プリンター: 未接続</p>
+  </div>
+</section>
+
 <script src="queue.js"></script>
 <script>
   const STORAGE_KEY = 'seiriken-state';
+  const PRINT_SETTINGS_KEY = 'seiriken-print-settings';
+  const DEFAULT_PRINT_SETTINGS = { storeName: '', headerMessage: '', footerMessage: '', qrUrl: '', showWaitEstimate: true };
+
+  function loadPrintSettings() {
+    try {
+      const raw = localStorage.getItem(PRINT_SETTINGS_KEY);
+      if (!raw) return Object.assign({}, DEFAULT_PRINT_SETTINGS);
+      const s = JSON.parse(raw);
+      return Object.assign({}, DEFAULT_PRINT_SETTINGS, s);
+    } catch (e) {
+      return Object.assign({}, DEFAULT_PRINT_SETTINGS);
+    }
+  }
+  function savePrintSettings(s) {
+    localStorage.setItem(PRINT_SETTINGS_KEY, JSON.stringify(s));
+  }
+  let printSettings = loadPrintSettings();
   const STATUS_LABEL = { waiting: '待機', calling: '呼び出し中', done: '完了' };
 
   function loadState() {
@@ -378,6 +429,26 @@
     }
   });
 
+  function fillSettingsForm() {
+    document.getElementById('set-storeName').value = printSettings.storeName;
+    document.getElementById('set-headerMessage').value = printSettings.headerMessage;
+    document.getElementById('set-footerMessage').value = printSettings.footerMessage;
+    document.getElementById('set-qrUrl').value = printSettings.qrUrl;
+    document.getElementById('set-showWaitEstimate').checked = printSettings.showWaitEstimate;
+  }
+  document.getElementById('save-settings-btn').addEventListener('click', () => {
+    printSettings = {
+      storeName: document.getElementById('set-storeName').value,
+      headerMessage: document.getElementById('set-headerMessage').value,
+      footerMessage: document.getElementById('set-footerMessage').value,
+      qrUrl: document.getElementById('set-qrUrl').value,
+      showWaitEstimate: document.getElementById('set-showWaitEstimate').checked,
+    };
+    savePrintSettings(printSettings);
+    renderPreview();
+    alert('設定を保存しました');
+  });
+  fillSettingsForm();
   renderPartySize();
   render();
 </script>
