@@ -90,6 +90,42 @@
     });
   });
 
+  function update(newState) {
+    state = newState;
+    saveState(state);
+    render();
+  }
+
+  document.getElementById('issue-btn').addEventListener('click', () => {
+    update(issueTicket(state));
+    document.getElementById('issued-label').textContent = 'あなたの番号は';
+    document.getElementById('issued-number').textContent = state.lastIssued;
+  });
+
+  document.getElementById('call-btn').addEventListener('click', () => {
+    if (state.waiting.length === 0) {
+      document.getElementById('admin-msg').textContent = '待っている番号はありません';
+      return;
+    }
+    document.getElementById('admin-msg').textContent = '';
+    update(callNext(state));
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    if (!confirm('番号をすべてリセットします。よろしいですか？')) return;
+    document.getElementById('issued-label').textContent = '';
+    document.getElementById('issued-number').textContent = '';
+    document.getElementById('admin-msg').textContent = '';
+    update(resetState());
+  });
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY) {
+      state = loadState();
+      render();
+    }
+  });
+
   render();
 </script>
 </body>
