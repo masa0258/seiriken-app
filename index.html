@@ -333,11 +333,12 @@
   });
 
   document.getElementById('issue-btn').addEventListener('click', () => {
+    const waitMs = estimatedWaitMsForNew(state);
     update(issueTicket(state, partySize, Date.now()));
     document.getElementById('issued-label').textContent = 'あなたの番号は / Your number is';
     document.getElementById('issued-number').textContent = state.lastIssued + '（' + partySize + '名）';
     document.getElementById('reception-wait').textContent =
-      'お待ち時間 / Wait: ' + fmtWait(estimatedWaitMsForNew(state));
+      'お待ち時間 / Wait: ' + fmtWait(waitMs);
     partySize = 1;
     renderPartySize();
   });
@@ -346,6 +347,7 @@
     if (!confirm('番号と記録をすべてリセットします。よろしいですか？')) return;
     document.getElementById('issued-label').textContent = '';
     document.getElementById('issued-number').textContent = '';
+    document.getElementById('reception-wait').textContent = '';
     update(resetState());
   });
 
