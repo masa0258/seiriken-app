@@ -401,7 +401,7 @@
   });
 
   const MODE = resolveMode(location.search);
-  // 役割ごとに表示する画面。staff は次タスクで settings を隠すまで暫定的に含める。
+  // 役割ごとに表示する画面。settings は隠し動線（長押し＋PIN）からのみ開く。
   const MODE_SCREENS = {
     reception: ['reception'],
     display: ['display'],
@@ -434,8 +434,10 @@
   }
   function closeSettings() {
     document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 'admin'));
+    // 単一画面モード（受付・表示）ではナビを隠したまま、staff のときだけ再表示する。
+    const allowed = MODE_SCREENS[MODE] || MODE_SCREENS.reception;
     const nav = document.querySelector('nav');
-    if (nav) nav.style.display = '';
+    if (nav) nav.style.display = allowed.length <= 1 ? 'none' : '';
   }
   function askPin() {
     const input = prompt('設定PINを入力してください');
