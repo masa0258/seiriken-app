@@ -67,3 +67,15 @@ function imageDataToMonoBitmap(imageData, threshold) {
   }
   return { width: width, height: height, data: out };
 }
+
+// 1bppモノクロビットマップ（{width,height,data}）をラスター印刷命令（GS v 0, m=0）に変換する。
+function escposRaster(monoBitmap) {
+  const stride = Math.ceil(monoBitmap.width / 8);
+  const height = monoBitmap.height;
+  const header = new Uint8Array([
+    0x1D, 0x76, 0x30, 0x00,
+    stride & 0xFF, (stride >> 8) & 0xFF,
+    height & 0xFF, (height >> 8) & 0xFF
+  ]);
+  return concatBytes(header, monoBitmap.data);
+}
