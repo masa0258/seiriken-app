@@ -219,6 +219,12 @@
       li.appendChild(ticketLine(t));
       const n = t.number;
       if (status === 'waiting') {
+        const waitSpan = document.createElement('span');
+        waitSpan.className = 'admin-wait';
+        const ms = estimatedWaitMs(state, t.number);
+        waitSpan.textContent =
+          ms === null ? '（計測中）' : '（予想 約' + Math.max(1, Math.round(ms / 60000)) + '分）';
+        li.appendChild(waitSpan);
         li.appendChild(makeButton('呼ぶ', 'call', () => update(callTicket(state, n, Date.now()))));
       } else if (status === 'calling') {
         li.appendChild(makeButton('完了', 'done', () => update(completeTicket(state, n, Date.now()))));
