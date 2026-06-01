@@ -58,3 +58,25 @@ function estimateWaitMsForNumber(ahead, avgServeMs) {
   if (avgServeMs === null || avgServeMs === undefined || avgServeMs === 0) return null;
   return ahead * avgServeMs;
 }
+
+// 通知判定: row と自分の番号・閾値・鳴らし済みラッチ fired から、
+// 今鳴らすべき段階 ('soon'|'turn'|null) と更新後の fired を返す。純粋・非破壊。
+function evaluateNotify(row, myNumber, threshold, fired) {
+  const safe = {
+    soon: !!(fired && fired.soon),
+    turn: !!(fired && fired.turn),
+  };
+  const r = row || {};
+  const waiting = Array.isArray(r.waiting_numbers) ? r.waiting_numbers : [];
+  const recent = Array.isArray(r.recent_called) ? r.recent_called : [];
+  const ahead = computeAhead(waiting, myNumber);
+  const isCalled = (r.calling_number === myNumber) || (recent.indexOf(myNumber) !== -1);
+
+  if (isCalled && !safe.turn) {
+    return { stage: 'turn', fired: { soon: true, turn: true } };
+  }
+  if (ahead.found && ahead.ahead <= threshold && !safe.soon) {
+    return { stage: 'soon', fired: { soon: true, turn: safe.turn } };
+  }
+  return { stage: null, fired: { soon: safe.soon, turn: safe.turn } };
+}

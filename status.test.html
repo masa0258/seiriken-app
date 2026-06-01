@@ -94,6 +94,50 @@
     computeAhead(w, 42);
     check('computeAhead は引数配列を破壊しない', JSON.stringify(w) === wBefore);
   })();
+
+  (function () {
+    const empty = { soon: false, turn: false };
+    // calling_number=38, recent=[38,37,36], waiting=[40,42,43]
+    const row = { calling_number: 38, recent_called: [38, 37, 36], waiting_numbers: [40, 42, 43] };
+
+    // 43番は ahead=2 > threshold(1)、呼ばれてもいない → null
+    const a = evaluateNotify(row, 43, 1, empty);
+    check('evaluateNotify: ahead>閾値かつ未呼出は stage:null', a.stage === null);
+
+    // 42番は ahead=1 <= threshold(1)、soon未通知 → soon
+    const b = evaluateNotify(row, 42, 1, empty);
+    check('evaluateNotify: ahead<=閾値で soon を返す', b.stage === 'soon' && b.fired.soon === true && b.fired.turn === false);
+
+    // 42番、soon通知済み → null
+    const c = evaluateNotify(row, 42, 1, { soon: true, turn: false });
+    check('evaluateNotify: soon通知済みなら再通知しない', c.stage === null);
+
+    // 38番は calling_number と一致 → turn
+    const d = evaluateNotify(row, 38, 1, empty);
+    check('evaluateNotify: 呼出中番号は turn を返す', d.stage === 'turn' && d.fired.turn === true);
+    check('evaluateNotify: turn通知時は soon ラッチも立てる', d.fired.soon === true);
+
+    // 38番、turn通知済み → null
+    const e = evaluateNotify(row, 38, 1, { soon: true, turn: true });
+    check('evaluateNotify: turn通知済みなら再通知しない', e.stage === null);
+
+    // recent_called に含まれる番号（waitingにもcallingにも無い）→ turn
+    const row2 = { calling_number: 39, recent_called: [39, 38], waiting_numbers: [40, 42, 43] };
+    const f = evaluateNotify(row2, 38, 1, empty);
+    check('evaluateNotify: recent_called に含まれる番号は turn', f.stage === 'turn');
+
+    // 待機にも呼出にも該当しない番号 → null
+    const g = evaluateNotify(row, 99, 1, empty);
+    check('evaluateNotify: 待機にも呼出にも無い番号は null', g.stage === null);
+
+    // 非破壊: row と fired を壊さない
+    const rowBefore = JSON.stringify(row);
+    const firedArg = { soon: false, turn: false };
+    const firedBefore = JSON.stringify(firedArg);
+    evaluateNotify(row, 42, 1, firedArg);
+    check('evaluateNotify: row を破壊しない', JSON.stringify(row) === rowBefore);
+    check('evaluateNotify: fired 引数を破壊しない', JSON.stringify(firedArg) === firedBefore);
+  })();
 </script>
 </body>
 </html>
