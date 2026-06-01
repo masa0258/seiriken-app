@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>呼び出し状況</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f5f5f5; color: #222; }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    .store-name { font-size: 18px; font-weight: bold; text-align: center; }
+    .calling-label { text-align: center; color: #666; font-size: 14px; }
+    .calling-number { text-align: center; font-size: 56px; font-weight: bold; color: #c0392b; margin: 4px 0; }
+    .my-row { display: flex; gap: 8px; align-items: center; }
+    .my-row input { flex: 1; font-size: 18px; padding: 8px; }
+    .my-row button { font-size: 16px; padding: 8px 16px; }
+    .my-result { margin-top: 10px; font-size: 18px; text-align: center; min-height: 24px; }
+    .info { font-size: 16px; }
+    .recent { font-size: 16px; }
+    .meta { font-size: 12px; color: #888; text-align: center; }
+    .err { color: #c0392b; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div id="store-name" class="store-name"></div>
+    <div class="calling-label">ただいまお呼び出し中</div>
+    <div id="calling-number" class="calling-number">—</div>
+  </div>
+
+  <div class="card">
+    <div class="my-row">
+      <input id="my-number" type="number" inputmode="numeric" placeholder="あなたの番号">
+      <button id="my-check">確認</button>
+    </div>
+    <div id="my-result" class="my-result"></div>
+  </div>
+
+  <div class="card info">
+    <div id="waiting-count">—</div>
+  </div>
+
+  <div class="card recent">
+    <div>直近の呼び出し</div>
+    <div id="recent-called">—</div>
+  </div>
+
+  <div id="meta" class="meta"></div>
+</div>
+
+<script src="status.js"></script>
+<script>
+  // ▼ 店ごとに設定（anonキーは公開前提で安全。秘密キーはここには書かない）
+  const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+  const SUPABASE_ANON_KEY = 'YOUR-ANON-KEY';
+  const ROW_ID = 'main';
+  const POLL_MS = 5000;
+
+  let lastRow = null;
+
+  function setText(id, text) {
+    document.getElementById(id).textContent = text;
+  }
+
+  function fmtMinutes(ms) {
+    if (ms === null || ms === undefined) return null;
+    const min = Math.max(1, Math.round(ms / 60000));
+    return min;
+  }
+
+  function renderRow(row) {
+    // 呼び出し中
+    if (row.calling_number === null || row.calling_number === undefined) {
+      setText('calling-number', '準備中です');
+    } else {
+      setText('calling-number', row.calling_number + '番');
+    }
+    // 待ち組数
+    setText('waiting-count', '現在 ' + (row.waiting_count || 0) + '組お待ち');
+    // 直近の呼び出し
+    const recent = Array.isArray(row.recent_called) ? row.recent_called : [];
+    setText('recent-called', recent.length ? recent.join('・') : '—');
+    // 自分の番号の結果を再計算
+    renderMyResult();
+    // メタ
+    let when = '';
+    if (row.updated_at) {
+      const d = new Date(row.updated_at);
+      when = '最終更新 ' + d.toLocaleTimeString();
+    }
+    setText('meta', when + '（自動更新中）');
+  }
+
+  function renderMyResult() {
+    const el = document.getElementById('my-result');
+    el.classList.remove('err');
+    const raw = document.getElementById('my-number').value;
+    if (raw === '' || lastRow === null) { el.textContent = ''; return; }
+    const myNumber = parseInt(raw, 10);
+    if (isNaN(myNumber)) { el.textContent = ''; return; }
+    const waiting = Array.isArray(lastRow.waiting_numbers) ? lastRow.waiting_numbers : [];
+    const res = computeAhead(waiting, myNumber);
+    if (!res.found) {
+      el.textContent = '呼び出し済み、または完了の可能性があります';
+      return;
+    }
+    const waitMs = estimateWaitMsForNumber(res.ahead, lastRow.avg_serve_ms);
+    const min = fmtMinutes(waitMs);
+    if (min === null) {
+      el.textContent = 'あと約' + res.ahead + '組';
+    } else {
+      el.textContent = 'あと約' + res.ahead + '組・約' + min + '分';
+    }
+  }
+
+  async function poll() {
+    const base = SUPABASE_URL.replace(/\/+$/, '');
+    const url = base + '/rest/v1/queue_status?id=eq.' + ROW_ID + '&select=*';
+    try {
+      const res = await fetch(url, { headers: { apikey: SUPABASE_ANON_KEY } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const rows = await res.json();
+      if (rows && rows.length > 0) {
+        lastRow = rows[0];
+        renderRow(lastRow);
+      }
+    } catch (e) {
+      // 直前の値は保持し、状態だけ「再接続中」に
+      const meta = document.getElementById('meta');
+      meta.textContent = '再接続中…';
+      meta.classList.add('err');
+    }
+  }
+
+  document.getElementById('my-check').addEventListener('click', renderMyResult);
+  document.getElementById('my-number').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') renderMyResult();
+  });
+
+  poll();
+  setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
