@@ -19,6 +19,15 @@
     .recent { font-size: 16px; }
     .meta { font-size: 12px; color: #888; text-align: center; }
     .err { color: #c0392b; }
+    .notify-row { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+    .notify-row button { font-size: 16px; padding: 8px 16px; }
+    .notify-status { font-size: 14px; color: #2e7d32; }
+    .keep-open { font-size: 12px; color: #888; text-align: center; margin-top: 8px; }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .overlay-box { background: #fff; border-radius: 16px; padding: 32px 24px; text-align: center; max-width: 90%; }
+    .overlay-title { font-size: 28px; font-weight: bold; color: #c0392b; }
+    .overlay-sub { font-size: 48px; font-weight: bold; margin: 12px 0 20px; }
+    .overlay-close { font-size: 18px; padding: 12px 32px; }
   </style>
 </head>
 <body>
@@ -35,6 +44,10 @@
       <button id="my-check">確認</button>
     </div>
     <div id="my-result" class="my-result"></div>
+    <div class="notify-row">
+      <button id="notify-btn">🔔 通知を受け取る</button>
+      <span id="notify-status" class="notify-status"></span>
+    </div>
   </div>
 
   <div class="card info">
@@ -47,6 +60,7 @@
   </div>
 
   <div id="meta" class="meta"></div>
+  <div class="keep-open">※通知のため、この画面を開いたままにしてください</div>
 </div>
 
 <script src="status.js"></script>
@@ -56,6 +70,136 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_o-b8b8jo0BYqNXm2I-bLXQ_F4nKUm_k';
   const ROW_ID = 'main';
   const POLL_MS = 5000;
+
+  const THRESHOLD = 1;                 // あと何組以下で「もうすぐ」
+  const NOTIFY_KEY = 'seiriken-notify';
+  let notifyNumber = null;             // 通知対象の整理券番号（未登録は null）
+  let notifyFired = { soon: false, turn: false };
+  let audioCtx = null;
+
+  function loadNotify() {
+    try {
+      const raw = localStorage.getItem(NOTIFY_KEY);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      if (obj && typeof obj.number === 'number') {
+        notifyNumber = obj.number;
+        notifyFired = { soon: !!(obj.fired && obj.fired.soon), turn: !!(obj.fired && obj.fired.turn) };
+      }
+    } catch (e) { /* 壊れていたら無視 */ }
+  }
+
+  function saveNotify() {
+    if (notifyNumber === null) { localStorage.removeItem(NOTIFY_KEY); return; }
+    localStorage.setItem(NOTIFY_KEY, JSON.stringify({ number: notifyNumber, fired: notifyFired }));
+  }
+
+  function ensureAudio() {
+    if (audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume(); return; }
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) { audioCtx = new AC(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+    } catch (e) { audioCtx = null; }
+  }
+
+  function beep(times) {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    for (let i = 0; i < times; i++) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.2;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t + 0.25);
+      t += 0.4;
+    }
+  }
+
+  function showOverlay(stage) {
+    const old = document.getElementById('overlay');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'overlay';
+    overlay.className = 'overlay';
+
+    const box = document.createElement('div');
+    box.className = 'overlay-box';
+
+    const title = document.createElement('div');
+    title.className = 'overlay-title';
+    title.textContent = (stage === 'turn') ? 'あなたの番です！' : 'まもなくお呼び出しです';
+
+    const sub = document.createElement('div');
+    sub.className = 'overlay-sub';
+    sub.textContent = notifyNumber + '番';
+
+    const btn = document.createElement('button');
+    btn.className = 'overlay-close';
+    btn.textContent = '閉じる';
+    btn.addEventListener('click', function () {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    });
+
+    box.appendChild(title);
+    box.appendChild(sub);
+    box.appendChild(btn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+
+  function fireAlert(stage) {
+    beep(stage === 'turn' ? 3 : 1);
+    if (navigator.vibrate) {
+      navigator.vibrate(stage === 'turn' ? [400, 150, 400] : [200]);
+    }
+    showOverlay(stage);
+  }
+
+  function refreshNotifyStatus() {
+    const status = document.getElementById('notify-status');
+    const btn = document.getElementById('notify-btn');
+    if (notifyNumber === null) {
+      status.textContent = '';
+      btn.textContent = '🔔 通知を受け取る';
+    } else {
+      status.textContent = '🔔 通知ON（' + notifyNumber + '番）';
+      btn.textContent = '解除';
+    }
+  }
+
+  function maybeNotify(row) {
+    if (notifyNumber === null) return;
+    const res = evaluateNotify(row, notifyNumber, THRESHOLD, notifyFired);
+    if (res.stage) {
+      notifyFired = res.fired;
+      saveNotify();
+      fireAlert(res.stage);
+    }
+  }
+
+  document.getElementById('notify-btn').addEventListener('click', function () {
+    if (notifyNumber !== null) {        // 解除
+      notifyNumber = null;
+      notifyFired = { soon: false, turn: false };
+      saveNotify();
+      refreshNotifyStatus();
+      return;
+    }
+    const raw = document.getElementById('my-number').value;
+    const n = parseInt(raw, 10);
+    if (raw === '' || isNaN(n)) {
+      document.getElementById('notify-status').textContent = '番号を入力してください';
+      return;
+    }
+    ensureAudio();                      // ユーザー操作で音を解錠
+    notifyNumber = n;
+    notifyFired = { soon: false, turn: false };
+    saveNotify();
+    refreshNotifyStatus();
+  });
 
   let lastRow = null;
 
@@ -125,6 +269,7 @@
       if (rows && rows.length > 0) {
         lastRow = rows[0];
         renderRow(lastRow);
+        maybeNotify(lastRow);
       }
     } catch (e) {
       // 直前の値は保持し、状態だけ「再接続中」に
@@ -139,6 +284,8 @@
     if (e.key === 'Enter') renderMyResult();
   });
 
+  loadNotify();
+  refreshNotifyStatus();
   poll();
   setInterval(poll, POLL_MS);
 </script>
