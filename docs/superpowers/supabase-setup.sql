@@ -82,3 +82,66 @@ $$;
 
 -- anon に RPC の実行のみ許可（秘密キーが無ければ更新できない）
 grant execute on function public.publish_status(text,int,jsonb,jsonb,int,int,bigint) to anon;
+
+-- 5. 設定テーブル（店舗内容設定＋PIN、1行のみ）
+--    店名等は秘密情報ではないため anon に SELECT を許可。書き込みは秘密キー必須。
+create table if not exists public.app_config (
+  id                 text primary key,
+  store_name         text    not null default '',
+  header_message     text    not null default '',
+  footer_message     text    not null default '',
+  qr_url             text    not null default '',
+  show_wait_estimate boolean not null default true,
+  pin                text    not null default '0000',
+  updated_at         timestamptz not null default now()
+);
+
+insert into public.app_config (id) values ('main')
+  on conflict (id) do nothing;
+
+alter table public.app_config enable row level security;
+
+drop policy if exists "anon read app_config" on public.app_config;
+create policy "anon read app_config" on public.app_config
+  for select to anon using (true);
+
+-- 6. publish_config RPC（SECURITY DEFINER で秘密キー照合）
+create or replace function public.publish_config(
+  p_secret     text,
+  p_store_name text,
+  p_header     text,
+  p_footer     text,
+  p_qr         text,
+  p_show_wait  boolean,
+  p_pin        text
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_secret text;
+begin
+  select secret into v_secret from public.private_config where id = 'main';
+  if v_secret is null or p_secret is distinct from v_secret then
+    raise exception 'unauthorized';
+  end if;
+  insert into public.app_config as c (
+    id, store_name, header_message, footer_message,
+    qr_url, show_wait_estimate, pin, updated_at
+  ) values (
+    'main', coalesce(p_store_name, ''), coalesce(p_header, ''), coalesce(p_footer, ''),
+    coalesce(p_qr, ''), coalesce(p_show_wait, true), coalesce(p_pin, '0000'), now()
+  )
+  on conflict (id) do update set
+    store_name         = excluded.store_name,
+    header_message     = excluded.header_message,
+    footer_message     = excluded.footer_message,
+    qr_url             = excluded.qr_url,
+    show_wait_estimate = excluded.show_wait_estimate,
+    pin                = excluded.pin,
+    updated_at         = now();
+end;
+$$;
+
+grant execute on function public.publish_config(text,text,text,text,text,boolean,text) to anon;
