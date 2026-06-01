@@ -195,6 +195,12 @@
     return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' +
       p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
+  // ミリ秒 → 「約N分」/ null → 「計測中」のバイリンガル文字列
+  function fmtWait(ms) {
+    if (ms === null) return '計測中 / Calculating';
+    const min = Math.max(1, Math.round(ms / 60000));
+    return '約 ' + min + ' 分 / Approx. ' + min + ' min';
+  }
 
   function renderAdminColumn(elId, status, withButtons) {
     const el = document.getElementById(elId);
