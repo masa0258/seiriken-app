@@ -116,6 +116,10 @@
       <ul id="display-waiting" class="display-list display-waiting"></ul>
     </div>
   </div>
+  <div id="display-wait-box" style="border:2px solid #333; border-radius:8px; padding:12px; margin:12px 0; text-align:center;">
+    <div style="font-size:1.1rem;">目安待ち時間 / Estimated wait</div>
+    <div id="display-wait" style="font-size:2rem; font-weight:bold;"></div>
+  </div>
 </section>
 
 <section id="report" class="screen">
@@ -286,6 +290,11 @@
     renderAdminColumn('admin-done', 'done');
     renderDisplayList('display-calling', 'calling');
     renderDisplayList('display-waiting', 'waiting');
+    const dw = document.getElementById('display-wait');
+    if (dw) {
+      const ms = estimatedWaitMsForNew(state);
+      dw.textContent = ms === null ? '計測中 / Calculating' : '約 ' + Math.max(1, Math.round(ms / 60000)) + ' 分';
+    }
     renderReport();
   }
 
