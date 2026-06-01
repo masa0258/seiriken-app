@@ -456,6 +456,43 @@
     if (closeBtn) closeBtn.addEventListener('click', closeSettings);
   })();
 
+  function isSettingsOpen() {
+    const el = document.getElementById('settings');
+    return !!(el && el.classList.contains('active'));
+  }
+  async function fetchConfig(config) {
+    const base = config.supabaseUrl.replace(/\/+$/, '');
+    const url = base + '/rest/v1/app_config?id=eq.main&select=*';
+    const res = await fetch(url, { headers: { apikey: config.anonKey, 'Authorization': 'Bearer ' + config.anonKey } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    return (Array.isArray(rows) && rows.length) ? rows[0] : null;
+  }
+  async function publishConfig(config, settings) {
+    const base = config.supabaseUrl.replace(/\/+$/, '');
+    const res = await fetch(base + '/rest/v1/rpc/publish_config', {
+      method: 'POST',
+      headers: { apikey: config.anonKey, 'Authorization': 'Bearer ' + config.anonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        p_secret: config.publishSecret,
+        p_store_name: settings.storeName,
+        p_header: settings.headerMessage,
+        p_footer: settings.footerMessage,
+        p_qr: settings.qrUrl,
+        p_show_wait: settings.showWaitEstimate,
+        p_pin: settings.pin,
+      }),
+    });
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error('HTTP ' + res.status + ' ' + t); }
+  }
+  async function fetchAndApplyConfig() {
+    if (!syncSettings.supabaseUrl || !syncSettings.anonKey) return;
+    const remote = await fetchConfig(syncSettings);
+    if (!remote) return;
+    printSettings = applyRemoteConfig(printSettings, remote);
+    savePrintSettings(printSettings);
+    if (!isSettingsOpen()) renderPreview();
+  }
   async function publishStatus(config, status) {
     const base = config.supabaseUrl.replace(/\/+$/, '');
     const res = await fetch(base + '/rest/v1/rpc/publish_status', {
@@ -716,7 +753,13 @@
     };
     savePrintSettings(printSettings);
     renderPreview();
-    alert('設定を保存しました');
+    if (syncSettings.supabaseUrl && syncSettings.anonKey && syncSettings.publishSecret) {
+      publishConfig(syncSettings, printSettings)
+        .then(() => alert('設定を保存しました（クラウド同期OK）'))
+        .catch((e) => alert('設定を保存しました（クラウド同期失敗: ' + e.message + '）'));
+    } else {
+      alert('設定を保存しました（この端末のみ。クラウド同期には書き込み秘密キーが必要です）');
+    }
   });
   function setSyncStatus(text) {
     document.getElementById('sync-status').textContent = text;
@@ -749,6 +792,8 @@
   });
   renderPartySize();
   render();
+  fetchAndApplyConfig().catch(() => {});
+  setInterval(() => { fetchAndApplyConfig().catch(() => {}); }, 30000);
 </script>
 </body>
 </html>
