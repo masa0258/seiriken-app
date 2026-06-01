@@ -14,42 +14,75 @@
     results.appendChild(li);
   }
 
-  // Task 1
-  check('initialState は 0,0,[]', (() => {
+  check('initialState は 0,[],[],[]', (() => {
     const s = initialState();
-    return s.lastIssued === 0 && s.nowCalling === 0 && Array.isArray(s.waiting) && s.waiting.length === 0;
+    return s.lastIssued === 0 && s.waiting.length === 0 && s.calling.length === 0 && s.done.length === 0;
   })());
 
-  // Task 2
-  check('issueTicket は番号を1つ増やし待ちに追加', (() => {
-    const s1 = issueTicket(initialState());
-    const s2 = issueTicket(s1);
-    return s2.lastIssued === 2 &&
-           s2.waiting.length === 2 &&
-           s2.waiting[0] === 1 && s2.waiting[1] === 2;
+  check('issueTicket は番号を1つ増やし待機に追加', (() => {
+    const s2 = issueTicket(issueTicket(initialState()));
+    return s2.lastIssued === 2 && s2.waiting.join(',') === '1,2' && s2.calling.length === 0;
   })());
+
   check('issueTicket は元の state を変更しない', (() => {
     const s0 = initialState();
     issueTicket(s0);
     return s0.lastIssued === 0 && s0.waiting.length === 0;
   })());
 
-  // Task 3
-  check('callNext は待ち先頭を呼び出し番号にする', (() => {
+  check('callTicket は待機→呼び出し中へ移動', (() => {
     let s = issueTicket(issueTicket(initialState())); // waiting [1,2]
-    s = callNext(s);
-    return s.nowCalling === 1 && s.waiting.length === 1 && s.waiting[0] === 2;
-  })());
-  check('callNext は待ちが空なら変化しない', (() => {
-    const s0 = { lastIssued: 5, nowCalling: 3, waiting: [] };
-    const s1 = callNext(s0);
-    return s1.nowCalling === 3 && s1.waiting.length === 0 && s1.lastIssued === 5;
+    s = callTicket(s, 1);
+    return s.waiting.join(',') === '2' && s.calling.join(',') === '1';
   })());
 
-  // Task 4
+  check('callTicket は複数を呼び出し中にできる', (() => {
+    let s = issueTicket(issueTicket(initialState())); // waiting [1,2]
+    s = callTicket(s, 1);
+    s = callTicket(s, 2);
+    return s.waiting.length === 0 && s.calling.join(',') === '1,2';
+  })());
+
+  check('callTicket は待機に無い番号なら変化しない', (() => {
+    const s0 = issueTicket(initialState());
+    const s1 = callTicket(s0, 99);
+    return s1.waiting.join(',') === '1' && s1.calling.length === 0;
+  })());
+
+  check('completeTicket は呼び出し中→完了へ移動', (() => {
+    let s = callTicket(issueTicket(initialState()), 1); // calling [1]
+    s = completeTicket(s, 1);
+    return s.calling.length === 0 && s.done.join(',') === '1';
+  })());
+
+  check('completeTicket は呼び出し中に無い番号なら変化しない', (() => {
+    let s = callTicket(issueTicket(initialState()), 1);
+    const s2 = completeTicket(s, 99);
+    return s2.calling.join(',') === '1' && s2.done.length === 0;
+  })());
+
+  check('backToWaiting は呼び出し中→待機へ戻す', (() => {
+    let s = callTicket(issueTicket(initialState()), 1); // calling [1]
+    s = backToWaiting(s, 1);
+    return s.calling.length === 0 && s.waiting.join(',') === '1';
+  })());
+
+  check('backToWaiting は待機を昇順に保つ', (() => {
+    let s = issueTicket(issueTicket(issueTicket(initialState()))); // waiting [1,2,3]
+    s = callTicket(s, 1);
+    s = backToWaiting(s, 1);
+    return s.waiting.join(',') === '1,2,3';
+  })());
+
+  check('backToWaiting は呼び出し中に無い番号なら変化しない', (() => {
+    let s = callTicket(issueTicket(initialState()), 1);
+    const s2 = backToWaiting(s, 99);
+    return s2.calling.join(',') === '1' && s2.waiting.length === 0;
+  })());
+
   check('resetState は初期状態を返す', (() => {
-    const s = resetState({ lastIssued: 9, nowCalling: 4, waiting: [5,6] });
-    return s.lastIssued === 0 && s.nowCalling === 0 && s.waiting.length === 0;
+    const s = resetState();
+    return s.lastIssued === 0 && s.waiting.length === 0 && s.calling.length === 0 && s.done.length === 0;
   })());
 </script>
 </body>
