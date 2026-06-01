@@ -62,15 +62,21 @@ begin
   if v_secret is null or p_secret is distinct from v_secret then
     raise exception 'unauthorized';
   end if;
-  update public.queue_status set
-    calling_number  = p_calling,
-    recent_called   = coalesce(p_recent,  '[]'::jsonb),
-    waiting_numbers = coalesce(p_waiting, '[]'::jsonb),
-    waiting_count   = coalesce(p_count, 0),
-    last_issued     = coalesce(p_last, 0),
-    avg_serve_ms    = p_avg,
-    updated_at      = now()
-  where id = 'main';
+  insert into public.queue_status as q (
+    id, calling_number, recent_called, waiting_numbers,
+    waiting_count, last_issued, avg_serve_ms, updated_at
+  ) values (
+    'main', p_calling, coalesce(p_recent, '[]'::jsonb), coalesce(p_waiting, '[]'::jsonb),
+    coalesce(p_count, 0), coalesce(p_last, 0), p_avg, now()
+  )
+  on conflict (id) do update set
+    calling_number  = excluded.calling_number,
+    recent_called   = excluded.recent_called,
+    waiting_numbers = excluded.waiting_numbers,
+    waiting_count   = excluded.waiting_count,
+    last_issued     = excluded.last_issued,
+    avg_serve_ms    = excluded.avg_serve_ms,
+    updated_at      = now();
 end;
 $$;
 
