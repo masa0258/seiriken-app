@@ -419,8 +419,8 @@
       s.classList.toggle('active', s.id === allowed[0]);
     });
     document.querySelectorAll('nav button').forEach((b) => b.classList.remove('active'));
-    const firstBtn = document.querySelector('nav button');
-    if (firstBtn) firstBtn.classList.add('active');
+    const activeBtn = document.querySelector('nav button[data-screen="' + allowed[0] + '"]');
+    if (activeBtn) activeBtn.classList.add('active');
   }
   applyMode(MODE);
 
