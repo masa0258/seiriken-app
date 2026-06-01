@@ -44,3 +44,26 @@ function escposQR(text, opts) {
 
   return concatBytes(model, cell, level, store, print);
 }
+
+// RGBA画素（{width,height,data}）を1bppモノクロビットマップに変換する。
+// 輝度 < threshold かつ alpha>=128 を黒（ビット1, MSB先頭）。行はバイト境界に詰める。
+function imageDataToMonoBitmap(imageData, threshold) {
+  if (threshold === undefined) threshold = 128;
+  const width = imageData.width;
+  const height = imageData.height;
+  const src = imageData.data;
+  const stride = Math.ceil(width / 8);
+  const out = new Uint8Array(stride * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const r = src[i], g = src[i + 1], b = src[i + 2], a = src[i + 3];
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      const black = a >= 128 && lum < threshold;
+      if (black) {
+        out[y * stride + (x >> 3)] |= (0x80 >> (x & 7));
+      }
+    }
+  }
+  return { width: width, height: height, data: out };
+}

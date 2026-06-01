@@ -44,6 +44,31 @@
     const bytes = escposQR('ABCD', {});            // 4バイト → 格納pL=7
     return includesSeq(Array.from(bytes), [0x1D, 0x28, 0x6B, 0x07, 0x00, 0x31, 0x50, 0x30, 0x41, 0x42, 0x43, 0x44]);
   })());
+
+  check('imageDataToMonoBitmap は黒=ビット1で1bpp化（8x1交互）', (() => {
+    // 8px: 黒,白,黒,白,黒,白,黒,白 → 10101010 = 0xAA
+    const data = new Uint8ClampedArray(8 * 4);
+    for (let x = 0; x < 8; x++) {
+      const v = (x % 2 === 0) ? 0 : 255; // 偶数=黒
+      data[x * 4] = v; data[x * 4 + 1] = v; data[x * 4 + 2] = v; data[x * 4 + 3] = 255;
+    }
+    const mb = imageDataToMonoBitmap({ width: 8, height: 1, data: data }, 128);
+    return mb.width === 8 && mb.height === 1 && mb.data.length === 1 && mb.data[0] === 0xAA;
+  })());
+
+  check('imageDataToMonoBitmap は行をバイト境界に詰める（2x2全黒）', (() => {
+    const data = new Uint8ClampedArray(2 * 2 * 4);
+    for (let i = 0; i < 4; i++) { data[i * 4] = 0; data[i * 4 + 1] = 0; data[i * 4 + 2] = 0; data[i * 4 + 3] = 255; }
+    const mb = imageDataToMonoBitmap({ width: 2, height: 2, data: data }, 128);
+    // stride = ceil(2/8)=1, 各行 0b11000000 = 0xC0
+    return mb.data.length === 2 && mb.data[0] === 0xC0 && mb.data[1] === 0xC0;
+  })());
+
+  check('imageDataToMonoBitmap は透明を白扱い', (() => {
+    const data = new Uint8ClampedArray(8 * 4); // 全0（黒・alpha0）
+    const mb = imageDataToMonoBitmap({ width: 8, height: 1, data: data }, 128);
+    return mb.data[0] === 0x00; // alpha0 は白 → 全ビット0
+  })());
 </script>
 </body>
 </html>
