@@ -32,9 +32,11 @@
   .secondary { font-size: 16px; padding: 10px 20px; margin: 24px 8px 8px; border: 1px solid #888; border-radius: 8px; background: #fff; cursor: pointer; }
 
   /* 呼び出し表示画面 */
-  .display-cols { display: flex; gap: 24px; justify-content: center; align-items: flex-start; }
-  .display-col { flex: 1; }
-  .display-col h2 { margin-bottom: 8px; }
+  .display-cols { display: flex; gap: 24px; justify-content: center; align-items: stretch; }
+  .display-col { flex: 1; border: 3px solid #ddd; border-radius: 16px; padding: 16px; }
+  .display-col.calling-box { border-color: #16a34a; }
+  .display-col.waiting-box { border-color: #6b7280; }
+  .display-col h2 { margin-top: 0; margin-bottom: 8px; }
   .col-calling-title { color: #16a34a; }
   .col-waiting-title { color: #6b7280; }
   .display-list { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
@@ -80,11 +82,11 @@
 
 <section id="display" class="screen">
   <div class="display-cols">
-    <div class="display-col">
+    <div class="display-col calling-box">
       <h2 class="col-calling-title">呼び出し中</h2>
       <ul id="display-calling" class="display-list display-calling"></ul>
     </div>
-    <div class="display-col">
+    <div class="display-col waiting-box">
       <h2 class="col-waiting-title">お待ちの番号</h2>
       <ul id="display-waiting" class="display-list display-waiting"></ul>
     </div>
@@ -191,18 +193,10 @@
   function renderDisplayList(elId, numbers) {
     const el = document.getElementById(elId);
     clearChildren(el);
-    if (numbers.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'dim';
-      li.textContent = '---';
-      el.appendChild(li);
-      return;
-    }
-    numbers.forEach((n) => {
-      const li = document.createElement('li');
-      li.textContent = n;
-      el.appendChild(li);
-    });
+    const li = document.createElement('li');
+    li.textContent = numbers.length === 0 ? '---' : numbers.join(', ');
+    if (numbers.length === 0) li.className = 'dim';
+    el.appendChild(li);
   }
 
   function render() {
