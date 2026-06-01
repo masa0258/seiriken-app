@@ -83,7 +83,8 @@
     setText('recent-called', recent.length ? recent.join('・') : '—');
     // 自分の番号の結果を再計算
     renderMyResult();
-    // メタ
+    // メタ（再接続中…の赤表示を回復時に解除）
+    document.getElementById('meta').classList.remove('err');
     let when = '';
     if (row.updated_at) {
       const d = new Date(row.updated_at);
