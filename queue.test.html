@@ -80,6 +80,18 @@
     return s2.calling.join(',') === '1' && s2.waiting.length === 0;
   })());
 
+  check('recallTicket は完了→呼び出し中へ戻す', (() => {
+    let s = completeTicket(callTicket(issueTicket(initialState()), 1), 1); // done [1]
+    s = recallTicket(s, 1);
+    return s.done.length === 0 && s.calling.join(',') === '1';
+  })());
+
+  check('recallTicket は完了に無い番号なら変化しない', (() => {
+    let s = completeTicket(callTicket(issueTicket(initialState()), 1), 1);
+    const s2 = recallTicket(s, 99);
+    return s2.done.join(',') === '1' && s2.calling.length === 0;
+  })());
+
   check('resetState は初期状態を返す', (() => {
     const s = resetState();
     return s.lastIssued === 0 && s.waiting.length === 0 && s.calling.length === 0 && s.done.length === 0;

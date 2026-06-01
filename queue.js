@@ -43,6 +43,14 @@ function backToWaiting(state, number) {
   return s;
 }
 
+function recallTicket(state, number) {
+  if (!state.done.includes(number)) return cloneState(state);
+  const s = cloneState(state);
+  s.done = s.done.filter((n) => n !== number);
+  s.calling = [...s.calling, number];
+  return s;
+}
+
 function resetState() {
   return initialState();
 }

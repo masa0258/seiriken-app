@@ -183,6 +183,7 @@
       span.className = 'tnum';
       span.textContent = n;
       li.appendChild(span);
+      li.appendChild(makeButton('呼び出し中に戻す', 'call', () => update(recallTicket(state, n))));
       el.appendChild(li);
     });
   }
