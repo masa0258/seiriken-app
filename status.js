@@ -53,3 +53,8 @@ function computeAhead(waitingNumbers, myNumber) {
   }
   return { found: true, ahead: ahead };
 }
+
+function estimateWaitMsForNumber(ahead, avgServeMs) {
+  if (avgServeMs === null || avgServeMs === undefined || avgServeMs === 0) return null;
+  return ahead * avgServeMs;
+}

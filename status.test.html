@@ -74,6 +74,26 @@
     const r4 = computeAhead([], 5);
     check('computeAhead: 空配列は found:false', r4.found === false && r4.ahead === 0);
   })();
+
+  (function () {
+    check('estimateWaitMsForNumber: 3組×1000ms=3000', estimateWaitMsForNumber(3, 1000) === 3000);
+    check('estimateWaitMsForNumber: 0組は0', estimateWaitMsForNumber(0, 1000) === 0);
+    check('estimateWaitMsForNumber: avg=null は null', estimateWaitMsForNumber(3, null) === null);
+    check('estimateWaitMsForNumber: avg=0 は null', estimateWaitMsForNumber(3, 0) === null);
+  })();
+
+  (function () {
+    // 非破壊チェック
+    const state = sampleState();
+    const before = JSON.stringify(state);
+    buildPublicStatus(state);
+    check('buildPublicStatus は state を破壊しない', JSON.stringify(state) === before);
+
+    const w = [40, 42, 43];
+    const wBefore = JSON.stringify(w);
+    computeAhead(w, 42);
+    check('computeAhead は引数配列を破壊しない', JSON.stringify(w) === wBefore);
+  })();
 </script>
 </body>
 </html>
