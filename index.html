@@ -178,6 +178,16 @@
     <button id="test-print-btn" class="secondary">テスト印刷</button>
     <p id="printer-status">プリンター: 未接続</p>
   </div>
+
+  <h3>オンライン共有 / Online sharing</h3>
+  <div class="settings-form">
+    <label class="checkbox"><input id="sync-enabled" type="checkbox"> オンライン共有を有効にする</label>
+    <label>Supabase URL<br><input id="sync-url" type="text" maxlength="200" placeholder="https://xxxx.supabase.co"></label>
+    <label>anonキー（公開）<br><input id="sync-anon" type="text" maxlength="500" placeholder="公開anonキー"></label>
+    <label>書き込み用 秘密キー<br><input id="sync-secret" type="password" maxlength="200" placeholder="お客さんには渡らない秘密キー"></label>
+    <button id="save-sync-btn" class="secondary">オンライン共有設定を保存</button>
+    <p id="sync-status">オンライン共有: オフ</p>
+  </div>
 </section>
 
 <script src="queue.js"></script>
@@ -186,6 +196,23 @@
   const STORAGE_KEY = 'seiriken-state';
   const PRINT_SETTINGS_KEY = 'seiriken-print-settings';
   const DEFAULT_PRINT_SETTINGS = { storeName: '', headerMessage: '', footerMessage: '', qrUrl: '', showWaitEstimate: true };
+  const SYNC_SETTINGS_KEY = 'seiriken-sync-settings';
+  const DEFAULT_SYNC_SETTINGS = { enabled: false, supabaseUrl: '', anonKey: '', publishSecret: '' };
+
+  function loadSyncSettings() {
+    try {
+      const raw = localStorage.getItem(SYNC_SETTINGS_KEY);
+      if (!raw) return Object.assign({}, DEFAULT_SYNC_SETTINGS);
+      const s = JSON.parse(raw);
+      return Object.assign({}, DEFAULT_SYNC_SETTINGS, s);
+    } catch (e) {
+      return Object.assign({}, DEFAULT_SYNC_SETTINGS);
+    }
+  }
+  function saveSyncSettings(s) {
+    localStorage.setItem(SYNC_SETTINGS_KEY, JSON.stringify(s));
+  }
+  let syncSettings = loadSyncSettings();
 
   function loadPrintSettings() {
     try {
@@ -570,6 +597,10 @@
     document.getElementById('set-footerMessage').value = printSettings.footerMessage;
     document.getElementById('set-qrUrl').value = printSettings.qrUrl;
     document.getElementById('set-showWaitEstimate').checked = printSettings.showWaitEstimate;
+    document.getElementById('sync-enabled').checked = syncSettings.enabled;
+    document.getElementById('sync-url').value = syncSettings.supabaseUrl;
+    document.getElementById('sync-anon').value = syncSettings.anonKey;
+    document.getElementById('sync-secret').value = syncSettings.publishSecret;
   }
   document.getElementById('save-settings-btn').addEventListener('click', () => {
     printSettings = {
@@ -583,6 +614,24 @@
     renderPreview();
     alert('設定を保存しました');
   });
+  function setSyncStatus(text) {
+    document.getElementById('sync-status').textContent = text;
+  }
+  function refreshSyncStatusLabel() {
+    setSyncStatus(syncSettings.enabled ? 'オンライン共有: オン' : 'オンライン共有: オフ');
+  }
+  document.getElementById('save-sync-btn').addEventListener('click', () => {
+    syncSettings = {
+      enabled: document.getElementById('sync-enabled').checked,
+      supabaseUrl: document.getElementById('sync-url').value.trim(),
+      anonKey: document.getElementById('sync-anon').value.trim(),
+      publishSecret: document.getElementById('sync-secret').value,
+    };
+    saveSyncSettings(syncSettings);
+    refreshSyncStatusLabel();
+    alert('オンライン共有設定を保存しました');
+  });
+  refreshSyncStatusLabel();
   fillSettingsForm();
   renderPreview();
   document.getElementById('connect-usb-btn').addEventListener('click', () => {
