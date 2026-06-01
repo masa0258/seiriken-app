@@ -13,9 +13,35 @@
   .screen.active { display: block; }
   .big-btn { font-size: 28px; padding: 24px 48px; margin: 24px; border: none; border-radius: 12px; background: #2563eb; color: #fff; cursor: pointer; }
   .number { font-size: 96px; font-weight: bold; color: #2563eb; }
-  .display-number { font-size: 30vh; font-weight: bold; color: #2563eb; line-height: 1; }
-  ul.waiting { list-style: none; padding: 0; font-size: 24px; }
-  .secondary { font-size: 16px; padding: 10px 20px; margin: 8px; border: 1px solid #888; border-radius: 8px; background: #fff; cursor: pointer; }
+
+  /* 管理画面の3カラム */
+  .status-cols { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; align-items: flex-start; }
+  .status-col { flex: 1 1 220px; max-width: 320px; border: 1px solid #ddd; border-radius: 12px; padding: 12px; }
+  .status-col h3 { margin-top: 0; }
+  .col-waiting h3 { color: #6b7280; }
+  .col-calling h3 { color: #16a34a; }
+  .col-done h3 { color: #9ca3af; }
+  .ticket-list { list-style: none; padding: 0; margin: 0; }
+  .ticket-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-bottom: 1px solid #eee; }
+  .tnum { font-size: 28px; font-weight: bold; min-width: 48px; text-align: left; }
+  .small-btn { font-size: 14px; padding: 6px 12px; border: none; border-radius: 8px; color: #fff; cursor: pointer; }
+  .small-btn.call { background: #16a34a; }
+  .small-btn.done { background: #2563eb; }
+  .small-btn.back { background: #6b7280; }
+  .empty { color: #aaa; padding: 8px; }
+  .secondary { font-size: 16px; padding: 10px 20px; margin: 24px 8px 8px; border: 1px solid #888; border-radius: 8px; background: #fff; cursor: pointer; }
+
+  /* 呼び出し表示画面 */
+  .display-cols { display: flex; gap: 24px; justify-content: center; align-items: flex-start; }
+  .display-col { flex: 1; }
+  .display-col h2 { margin-bottom: 8px; }
+  .col-calling-title { color: #16a34a; }
+  .col-waiting-title { color: #6b7280; }
+  .display-list { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+  .display-list li { font-size: 12vh; font-weight: bold; line-height: 1; }
+  .display-calling li { color: #16a34a; }
+  .display-waiting li { color: #6b7280; }
+  .display-list li.dim { color: #ccc; }
 </style>
 </head>
 <body>
@@ -35,17 +61,34 @@
 
 <section id="admin" class="screen">
   <h2>呼び出し管理</h2>
-  <p>現在の呼び出し番号: <span id="admin-now" class="number">---</span></p>
-  <button id="call-btn" class="big-btn">次を呼ぶ</button>
-  <p id="admin-msg"></p>
-  <h3>待ち番号</h3>
-  <ul id="waiting-list" class="waiting"></ul>
+  <div class="status-cols">
+    <div class="status-col col-waiting">
+      <h3>待機</h3>
+      <ul id="admin-waiting" class="ticket-list"></ul>
+    </div>
+    <div class="status-col col-calling">
+      <h3>呼び出し中</h3>
+      <ul id="admin-calling" class="ticket-list"></ul>
+    </div>
+    <div class="status-col col-done">
+      <h3>完了</h3>
+      <ul id="admin-done" class="ticket-list"></ul>
+    </div>
+  </div>
   <button id="reset-btn" class="secondary">リセット</button>
 </section>
 
 <section id="display" class="screen">
-  <p>ただいまの呼び出し番号</p>
-  <div id="display-now" class="display-number">---</div>
+  <div class="display-cols">
+    <div class="display-col">
+      <h2 class="col-calling-title">呼び出し中</h2>
+      <ul id="display-calling" class="display-list display-calling"></ul>
+    </div>
+    <div class="display-col">
+      <h2 class="col-waiting-title">お待ちの番号</h2>
+      <ul id="display-waiting" class="display-list display-waiting"></ul>
+    </div>
+  </div>
 </section>
 
 <script src="queue.js"></script>
@@ -57,7 +100,8 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return initialState();
       const s = JSON.parse(raw);
-      return { lastIssued: s.lastIssued|0, nowCalling: s.nowCalling|0, waiting: Array.isArray(s.waiting) ? s.waiting : [] };
+      const arr = (x) => Array.isArray(x) ? x.filter((n) => typeof n === 'number') : [];
+      return { lastIssued: s.lastIssued | 0, waiting: arr(s.waiting), calling: arr(s.calling), done: arr(s.done) };
     } catch (e) {
       return initialState();
     }
@@ -68,23 +112,111 @@
 
   let state = loadState();
 
-  function render() {
-    document.getElementById('waiting-count').textContent = state.waiting.length;
-    document.getElementById('admin-now').textContent = state.nowCalling === 0 ? '---' : state.nowCalling;
-    document.getElementById('display-now').textContent = state.nowCalling === 0 ? '---' : state.nowCalling;
-    const list = document.getElementById('waiting-list');
-    while (list.firstChild) list.removeChild(list.firstChild);
-    state.waiting.forEach(n => {
+  function clearChildren(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  }
+
+  function makeButton(label, cls, onClick) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = 'small-btn ' + cls;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function renderAdminWaiting() {
+    const el = document.getElementById('admin-waiting');
+    clearChildren(el);
+    if (state.waiting.length === 0) {
       const li = document.createElement('li');
-      li.textContent = n;
-      list.appendChild(li);
+      li.className = 'empty';
+      li.textContent = 'なし';
+      el.appendChild(li);
+      return;
+    }
+    state.waiting.forEach((n) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'tnum';
+      span.textContent = n;
+      li.appendChild(span);
+      li.appendChild(makeButton('呼ぶ', 'call', () => update(callTicket(state, n))));
+      el.appendChild(li);
     });
   }
 
-  document.querySelectorAll('nav button').forEach(btn => {
+  function renderAdminCalling() {
+    const el = document.getElementById('admin-calling');
+    clearChildren(el);
+    if (state.calling.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'なし';
+      el.appendChild(li);
+      return;
+    }
+    state.calling.forEach((n) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'tnum';
+      span.textContent = n;
+      li.appendChild(span);
+      li.appendChild(makeButton('完了', 'done', () => update(completeTicket(state, n))));
+      li.appendChild(makeButton('待機に戻す', 'back', () => update(backToWaiting(state, n))));
+      el.appendChild(li);
+    });
+  }
+
+  function renderAdminDone() {
+    const el = document.getElementById('admin-done');
+    clearChildren(el);
+    if (state.done.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'なし';
+      el.appendChild(li);
+      return;
+    }
+    state.done.forEach((n) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'tnum';
+      span.textContent = n;
+      li.appendChild(span);
+      el.appendChild(li);
+    });
+  }
+
+  function renderDisplayList(elId, numbers) {
+    const el = document.getElementById(elId);
+    clearChildren(el);
+    if (numbers.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'dim';
+      li.textContent = '---';
+      el.appendChild(li);
+      return;
+    }
+    numbers.forEach((n) => {
+      const li = document.createElement('li');
+      li.textContent = n;
+      el.appendChild(li);
+    });
+  }
+
+  function render() {
+    document.getElementById('waiting-count').textContent = state.waiting.length;
+    renderAdminWaiting();
+    renderAdminCalling();
+    renderAdminDone();
+    renderDisplayList('display-calling', state.calling);
+    renderDisplayList('display-waiting', state.waiting);
+  }
+
+  document.querySelectorAll('nav button').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.screen).classList.add('active');
     });
@@ -102,20 +234,10 @@
     document.getElementById('issued-number').textContent = state.lastIssued;
   });
 
-  document.getElementById('call-btn').addEventListener('click', () => {
-    if (state.waiting.length === 0) {
-      document.getElementById('admin-msg').textContent = '待っている番号はありません';
-      return;
-    }
-    document.getElementById('admin-msg').textContent = '';
-    update(callNext(state));
-  });
-
   document.getElementById('reset-btn').addEventListener('click', () => {
     if (!confirm('番号をすべてリセットします。よろしいですか？')) return;
     document.getElementById('issued-label').textContent = '';
     document.getElementById('issued-number').textContent = '';
-    document.getElementById('admin-msg').textContent = '';
     update(resetState());
   });
 
