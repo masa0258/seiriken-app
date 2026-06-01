@@ -181,6 +181,7 @@
 </section>
 
 <script src="queue.js"></script>
+<script src="printer.js"></script>
 <script>
   const STORAGE_KEY = 'seiriken-state';
   const PRINT_SETTINGS_KEY = 'seiriken-print-settings';
@@ -429,6 +430,78 @@
     }
   });
 
+  // ticketData = { number, partySize, issuedAt, waitMs }
+  // 80mm幅（576px）の canvas にレイアウトを描画して返す。QRは描画しない（ネイティブ命令で印字）。
+  function renderTicketCanvas(ticketData, settings) {
+    const W = 576;
+    const PAD = 16;
+    const items = [];
+    if (settings.storeName) items.push({ text: settings.storeName, font: 'bold 40px sans-serif', h: 52 });
+    if (settings.headerMessage) items.push({ text: settings.headerMessage, font: '24px sans-serif', h: 32 });
+    items.push({ divider: true, h: 20 });
+    items.push({ text: '整理券 / TICKET', font: '24px sans-serif', h: 36 });
+    items.push({ text: String(ticketData.number), font: 'bold 140px sans-serif', h: 150 });
+    items.push({ text: ticketData.partySize + '名様', font: '32px sans-serif', h: 44 });
+    const d = new Date(ticketData.issuedAt);
+    const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    items.push({ text: '発券 ' + hhmm, font: '24px sans-serif', h: 34 });
+    if (settings.showWaitEstimate && ticketData.waitMs !== null && ticketData.waitMs !== undefined) {
+      const min = Math.max(1, Math.round(ticketData.waitMs / 60000));
+      items.push({ text: '予想待ち 約' + min + '分', font: 'bold 28px sans-serif', h: 40 });
+    }
+    if (settings.footerMessage) {
+      items.push({ divider: true, h: 20 });
+      items.push({ text: settings.footerMessage, font: '22px sans-serif', h: 30 });
+    }
+
+    let total = PAD * 2;
+    items.forEach((it) => { total += it.h; });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = total;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, total);
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    let y = PAD;
+    items.forEach((it) => {
+      if (it.divider) {
+        ctx.save();
+        ctx.strokeStyle = '#000';
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(PAD, y + it.h / 2);
+        ctx.lineTo(W - PAD, y + it.h / 2);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.font = it.font;
+        ctx.fillText(it.text, W / 2, y);
+      }
+      y += it.h;
+    });
+    return canvas;
+  }
+  function sampleTicketData() {
+    const next = (state.lastIssued | 0) + 1;
+    return { number: next, partySize: 2, issuedAt: Date.now(), waitMs: estimatedWaitMsForNew(state) };
+  }
+  function renderPreview() {
+    const box = document.getElementById('ticket-preview');
+    clearChildren(box);
+    const canvas = renderTicketCanvas(sampleTicketData(), printSettings);
+    box.appendChild(canvas);
+    if (printSettings.qrUrl) {
+      const ph = document.createElement('div');
+      ph.textContent = '［QR印字位置: ' + printSettings.qrUrl + '］';
+      ph.style.cssText = 'font-size:12px;color:#666;border:1px dashed #999;padding:8px;margin-top:4px;width:576px;max-width:100%;box-sizing:border-box;text-align:center;';
+      box.appendChild(ph);
+    }
+  }
   function fillSettingsForm() {
     document.getElementById('set-storeName').value = printSettings.storeName;
     document.getElementById('set-headerMessage').value = printSettings.headerMessage;
@@ -449,6 +522,7 @@
     alert('設定を保存しました');
   });
   fillSettingsForm();
+  renderPreview();
   renderPartySize();
   render();
 </script>
