@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>整理券システム</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; text-align: center; }
+  nav { display: flex; }
+  nav button { flex: 1; padding: 12px; font-size: 16px; border: none; background: #eee; cursor: pointer; }
+  nav button.active { background: #2563eb; color: #fff; }
+  .screen { display: none; padding: 24px; }
+  .screen.active { display: block; }
+  .big-btn { font-size: 28px; padding: 24px 48px; margin: 24px; border: none; border-radius: 12px; background: #2563eb; color: #fff; cursor: pointer; }
+  .number { font-size: 96px; font-weight: bold; color: #2563eb; }
+  .display-number { font-size: 30vh; font-weight: bold; color: #2563eb; line-height: 1; }
+  ul.waiting { list-style: none; padding: 0; font-size: 24px; }
+  .secondary { font-size: 16px; padding: 10px 20px; margin: 8px; border: 1px solid #888; border-radius: 8px; background: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<nav>
+  <button data-screen="reception" class="active">受付</button>
+  <button data-screen="admin">呼び出し管理</button>
+  <button data-screen="display">呼び出し表示</button>
+</nav>
+
+<section id="reception" class="screen active">
+  <h2>整理券受付</h2>
+  <button id="issue-btn" class="big-btn">整理券を取る</button>
+  <p id="issued-label"></p>
+  <p class="number" id="issued-number"></p>
+  <p>現在の待ち人数: <span id="waiting-count">0</span> 人</p>
+</section>
+
+<section id="admin" class="screen">
+  <h2>呼び出し管理</h2>
+  <p>現在の呼び出し番号: <span id="admin-now" class="number">---</span></p>
+  <button id="call-btn" class="big-btn">次を呼ぶ</button>
+  <p id="admin-msg"></p>
+  <h3>待ち番号</h3>
+  <ul id="waiting-list" class="waiting"></ul>
+  <button id="reset-btn" class="secondary">リセット</button>
+</section>
+
+<section id="display" class="screen">
+  <p>ただいまの呼び出し番号</p>
+  <div id="display-now" class="display-number">---</div>
+</section>
+
+<script src="queue.js"></script>
+<script>
+  const STORAGE_KEY = 'seiriken-state';
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return initialState();
+      const s = JSON.parse(raw);
+      return { lastIssued: s.lastIssued|0, nowCalling: s.nowCalling|0, waiting: Array.isArray(s.waiting) ? s.waiting : [] };
+    } catch (e) {
+      return initialState();
+    }
+  }
+  function saveState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  let state = loadState();
+
+  function render() {
+    document.getElementById('waiting-count').textContent = state.waiting.length;
+    document.getElementById('admin-now').textContent = state.nowCalling === 0 ? '---' : state.nowCalling;
+    document.getElementById('display-now').textContent = state.nowCalling === 0 ? '---' : state.nowCalling;
+    const list = document.getElementById('waiting-list');
+    while (list.firstChild) list.removeChild(list.firstChild);
+    state.waiting.forEach(n => {
+      const li = document.createElement('li');
+      li.textContent = n;
+      list.appendChild(li);
+    });
+  }
+
+  document.querySelectorAll('nav button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.screen).classList.add('active');
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>
