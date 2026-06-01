@@ -193,12 +193,15 @@
 <script src="queue.js"></script>
 <script src="printer.js"></script>
 <script src="status.js"></script>
+<script src="modes.js"></script>
 <script>
   const STORAGE_KEY = 'seiriken-state';
   const PRINT_SETTINGS_KEY = 'seiriken-print-settings';
   const DEFAULT_PRINT_SETTINGS = { storeName: '', headerMessage: '', footerMessage: '', qrUrl: '', showWaitEstimate: true };
+  const DEFAULT_SUPABASE_URL = 'https://gfnpoamqcwydgxiwrcbj.supabase.co';
+  const DEFAULT_SUPABASE_ANON = 'sb_publishable_o-b8b8jo0BYqNXm2I-bLXQ_F4nKUm_k';
   const SYNC_SETTINGS_KEY = 'seiriken-sync-settings';
-  const DEFAULT_SYNC_SETTINGS = { enabled: false, supabaseUrl: '', anonKey: '', publishSecret: '' };
+  const DEFAULT_SYNC_SETTINGS = { enabled: false, supabaseUrl: DEFAULT_SUPABASE_URL, anonKey: DEFAULT_SUPABASE_ANON, publishSecret: '' };
 
   function loadSyncSettings() {
     try {
@@ -394,6 +397,32 @@
       if (btn.dataset.screen === 'settings') renderPreview();
     });
   });
+
+  const MODE = resolveMode(location.search);
+  // 役割ごとに表示する画面。staff は次タスクで settings を隠すまで暫定的に含める。
+  const MODE_SCREENS = {
+    reception: ['reception'],
+    display: ['display'],
+    staff: ['admin', 'report', 'settings'],
+  };
+  function applyMode(mode) {
+    const allowed = MODE_SCREENS[mode] || MODE_SCREENS.reception;
+    // 許可されていないナビボタンを取り除く
+    document.querySelectorAll('nav button').forEach((b) => {
+      if (allowed.indexOf(b.dataset.screen) === -1) b.remove();
+    });
+    // 単一画面モードはナビ自体を隠す
+    const nav = document.querySelector('nav');
+    if (nav) nav.style.display = allowed.length <= 1 ? 'none' : '';
+    // 最初の許可画面だけを active にする
+    document.querySelectorAll('.screen').forEach((s) => {
+      s.classList.toggle('active', s.id === allowed[0]);
+    });
+    document.querySelectorAll('nav button').forEach((b) => b.classList.remove('active'));
+    const firstBtn = document.querySelector('nav button');
+    if (firstBtn) firstBtn.classList.add('active');
+  }
+  applyMode(MODE);
 
   async function publishStatus(config, status) {
     const base = config.supabaseUrl.replace(/\/+$/, '');
