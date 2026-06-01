@@ -190,7 +190,7 @@
     overlay.className = 'overlay';
 
     const box = document.createElement('div');
-    box.className = 'overlay-box';
+    box.className = 'overlay-box ' + (stage === 'turn' ? 'turn' : 'soon');
 
     const title = document.createElement('div');
     title.className = 'overlay-title';
@@ -284,11 +284,29 @@
     } else {
       setText('calling-number', row.calling_number + '番');
     }
-    // 待ち組数
-    setText('waiting-count', '現在 ' + (row.waiting_count || 0) + '組お待ち');
-    // 直近の呼び出し
+    // 待ち組数（数字だけ強調）
+    const waitEl = document.getElementById('waiting-count');
+    while (waitEl.firstChild) waitEl.removeChild(waitEl.firstChild);
+    const waitN = document.createElement('span');
+    waitN.className = 'n';
+    waitN.textContent = (row.waiting_count || 0);
+    waitEl.appendChild(document.createTextNode('現在 '));
+    waitEl.appendChild(waitN);
+    waitEl.appendChild(document.createTextNode(' 組お待ち'));
+    // 直近の呼び出し（チップ表示）
     const recent = Array.isArray(row.recent_called) ? row.recent_called : [];
-    setText('recent-called', recent.length ? recent.join('・') : '—');
+    const recentEl = document.getElementById('recent-called');
+    while (recentEl.firstChild) recentEl.removeChild(recentEl.firstChild);
+    if (recent.length) {
+      for (let i = 0; i < recent.length; i++) {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = recent[i];
+        recentEl.appendChild(chip);
+      }
+    } else {
+      recentEl.textContent = '—';
+    }
     // 自分の番号の結果を再計算
     renderMyResult();
     // メタ（再接続中…の赤表示を回復時に解除）
