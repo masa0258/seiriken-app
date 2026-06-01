@@ -92,6 +92,30 @@
     const s = resetState();
     return s.lastIssued === 0 && s.tickets.length === 0;
   })());
+
+  // --- 待ち時間予測 ---
+  const C1 = new Date('2026-06-01T12:00:00').getTime();
+  const C2 = new Date('2026-06-01T12:05:00').getTime(); // C1 + 5分
+  const C3 = new Date('2026-06-01T12:11:00').getTime(); // C2 + 6分
+
+  check('averageServeInterval は案内0件なら null', (() => {
+    return averageServeInterval(issueTicket(initialState(), 2, C1)) === null;
+  })());
+
+  check('averageServeInterval は案内1件のみなら null', (() => {
+    let s = issueTicket(initialState(), 2, C1);
+    s = callTicket(s, 1, C2);
+    return averageServeInterval(s) === null;
+  })());
+
+  check('averageServeInterval は連続案内の間隔平均を返す', (() => {
+    let s = issueTicket(issueTicket(issueTicket(initialState(), 1, C1), 1, C1), 1, C1);
+    s = callTicket(s, 1, C1); // 12:00
+    s = callTicket(s, 2, C2); // 12:05 (間隔5分)
+    s = callTicket(s, 3, C3); // 12:11 (間隔6分)
+    // 平均 = (5分 + 6分) / 2 = 5.5分
+    return averageServeInterval(s) === 5.5 * 60000;
+  })());
 </script>
 </body>
 </html>

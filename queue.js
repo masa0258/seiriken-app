@@ -84,3 +84,18 @@ function hourlySummary(state) {
   });
   return Object.values(buckets).sort((a, b) => (a.key < b.key ? -1 : 1));
 }
+
+function averageServeInterval(state, sampleSize = 5) {
+  const times = state.tickets
+    .filter((t) => t.calledAt !== null)
+    .map((t) => t.calledAt)
+    .sort((a, b) => a - b);
+  const intervals = [];
+  for (let i = 1; i < times.length; i++) {
+    intervals.push(times[i] - times[i - 1]);
+  }
+  if (intervals.length === 0) return null;
+  const recent = intervals.slice(-sampleSize);
+  const sum = recent.reduce((acc, v) => acc + v, 0);
+  return sum / recent.length;
+}
