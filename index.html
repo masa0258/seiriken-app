@@ -81,6 +81,7 @@
   <button id="issue-btn" class="big-btn">整理券を取る<br><span class="en">Take a Ticket</span></button>
   <p id="issued-label"></p>
   <p class="number" id="issued-number"></p>
+  <p id="reception-wait"></p>
   <p>現在の待ち人数 / People waiting: <span id="waiting-count">0</span> 人</p>
 </section>
 
@@ -312,6 +313,8 @@
     update(issueTicket(state, partySize, Date.now()));
     document.getElementById('issued-label').textContent = 'あなたの番号は / Your number is';
     document.getElementById('issued-number').textContent = state.lastIssued + '（' + partySize + '名）';
+    document.getElementById('reception-wait').textContent =
+      'お待ち時間 / Wait: ' + fmtWait(estimatedWaitMsForNew(state));
     partySize = 1;
     renderPartySize();
   });
