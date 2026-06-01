@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>modes.js tests</title></head>
+<body>
+<h1>modes.js テスト結果</h1>
+<ul id="results"></ul>
+<script src="modes.js"></script>
+<script>
+  const results = document.getElementById('results');
+  function check(name, cond) {
+    const li = document.createElement('li');
+    li.textContent = (cond ? 'PASS: ' : 'FAIL: ') + name;
+    li.style.color = cond ? 'green' : 'red';
+    results.appendChild(li);
+  }
+
+  // resolveMode
+  check('resolveMode: ?mode=staff → staff', resolveMode('?mode=staff') === 'staff');
+  check('resolveMode: ?mode=display → display', resolveMode('?mode=display') === 'display');
+  check('resolveMode: ?mode=reception → reception', resolveMode('?mode=reception') === 'reception');
+  check('resolveMode: 空文字 → reception', resolveMode('') === 'reception');
+  check('resolveMode: 不明値 → reception', resolveMode('?mode=admin') === 'reception');
+  check('resolveMode: 他パラメータ混在 → display', resolveMode('?foo=1&mode=display') === 'display');
+  check('resolveMode: undefined → reception', resolveMode(undefined) === 'reception');
+
+  // applyRemoteConfig
+  const defaults = { storeName: 'ローカル店', headerMessage: 'h', footerMessage: 'f', qrUrl: 'q', showWaitEstimate: true, pin: '1234' };
+  const none = applyRemoteConfig(defaults, null);
+  check('applyRemoteConfig: remote=null は defaults を返す（storeName）', none.storeName === 'ローカル店');
+  check('applyRemoteConfig: remote=null は defaults を返す（pin）', none.pin === '1234');
+
+  const row = { store_name: 'クラウド店', header_message: 'H', footer_message: 'F', qr_url: 'Q', show_wait_estimate: false, pin: '9999' };
+  const merged = applyRemoteConfig(defaults, row);
+  check('applyRemoteConfig: remote の store_name を採用', merged.storeName === 'クラウド店');
+  check('applyRemoteConfig: remote の show_wait_estimate=false を採用', merged.showWaitEstimate === false);
+  check('applyRemoteConfig: remote の pin を採用', merged.pin === '9999');
+
+  const partial = { store_name: 'クラウド店', header_message: null, footer_message: null, qr_url: null, show_wait_estimate: null, pin: null };
+  const mergedPartial = applyRemoteConfig(defaults, partial);
+  check('applyRemoteConfig: remote の null フィールドは defaults にフォールバック（header）', mergedPartial.headerMessage === 'h');
+  check('applyRemoteConfig: remote の null pin は defaults にフォールバック', mergedPartial.pin === '1234');
+  check('applyRemoteConfig: remote の null show_wait は defaults(true)', mergedPartial.showWaitEstimate === true);
+
+  const emptyDefaults = applyRemoteConfig({}, null);
+  check('applyRemoteConfig: defaults 欠落時 pin は 0000', emptyDefaults.pin === '0000');
+  check('applyRemoteConfig: defaults 欠落時 showWaitEstimate は true', emptyDefaults.showWaitEstimate === true);
+</script>
+</body>
+</html>
