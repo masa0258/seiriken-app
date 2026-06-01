@@ -44,6 +44,9 @@
   /* 呼び出し表示画面 */
   .display-cols { display: flex; gap: 24px; justify-content: center; align-items: stretch; }
   .display-col { flex: 1; border: 3px solid #ddd; border-radius: 16px; padding: 16px; }
+  .display-wait-box { border: 3px solid #333; border-radius: 16px; padding: 16px; margin: 12px 0; text-align: center; }
+  .display-wait-box .label { font-size: 1.1rem; }
+  .display-wait-box .value { font-size: 2rem; font-weight: bold; }
   .display-col.calling-box { border-color: #16a34a; }
   .display-col.waiting-box { border-color: #6b7280; }
   .display-col h2 { margin-top: 0; margin-bottom: 8px; }
@@ -116,9 +119,9 @@
       <ul id="display-waiting" class="display-list display-waiting"></ul>
     </div>
   </div>
-  <div id="display-wait-box" style="border:2px solid #333; border-radius:8px; padding:12px; margin:12px 0; text-align:center;">
-    <div style="font-size:1.1rem;">目安待ち時間 / Estimated wait</div>
-    <div id="display-wait" style="font-size:2rem; font-weight:bold;"></div>
+  <div id="display-wait-box" class="display-wait-box">
+    <div class="label">目安待ち時間 / Estimated wait</div>
+    <div id="display-wait" class="value"></div>
   </div>
 </section>
 
@@ -201,10 +204,14 @@
     return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' +
       p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
+  // ミリ秒 → 表示用の分（最低1分、整数）
+  function waitMin(ms) {
+    return Math.max(1, Math.round(ms / 60000));
+  }
   // ミリ秒 → 「約N分」/ null → 「計測中」のバイリンガル文字列
   function fmtWait(ms) {
     if (ms === null) return '計測中 / Calculating';
-    const min = Math.max(1, Math.round(ms / 60000));
+    const min = waitMin(ms);
     return '約 ' + min + ' 分 / Approx. ' + min + ' min';
   }
 
@@ -228,7 +235,7 @@
         waitSpan.className = 'admin-wait';
         const ms = estimatedWaitMs(state, t.number);
         waitSpan.textContent =
-          ms === null ? '（計測中）' : '（予想 約' + Math.max(1, Math.round(ms / 60000)) + '分）';
+          ms === null ? '（計測中）' : '（予想 約' + waitMin(ms) + '分）';
         li.appendChild(waitSpan);
         li.appendChild(makeButton('呼ぶ', 'call', () => update(callTicket(state, n, Date.now()))));
       } else if (status === 'calling') {
@@ -293,7 +300,7 @@
     const dw = document.getElementById('display-wait');
     if (dw) {
       const ms = estimatedWaitMsForNew(state);
-      dw.textContent = ms === null ? '計測中 / Calculating' : '約 ' + Math.max(1, Math.round(ms / 60000)) + ' 分';
+      dw.textContent = ms === null ? '計測中 / Calculating' : '約 ' + waitMin(ms) + ' 分';
     }
     renderReport();
   }
